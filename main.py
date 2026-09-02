@@ -62,13 +62,13 @@ def collect_resale_items() -> list[dict]:
     return items
 
 
-def render_filter_bar(all_sizes: list[str]) -> str:
-    if not all_sizes:
+def render_chip_bar(label: str, group: str, values: list[str], all_label: str) -> str:
+    if not values:
         return ""
-    chips = ['<button class="chip active" data-size="__all__">All sizes</button>']
-    for s in all_sizes:
-        chips.append(f'<button class="chip" data-size="{s}">{s}</button>')
-    return f'<div class="filters"><div class="filters-label">Filter by size</div>{"".join(chips)}</div>'
+    chips = [f'<button class="chip active" data-group="{group}" data-value="__all__">{all_label}</button>']
+    for v in values:
+        chips.append(f'<button class="chip" data-group="{group}" data-value="{v}">{v}</button>')
+    return f'<div class="filters"><div class="filters-label">{label}</div>{"".join(chips)}</div>'
 
 
 def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
@@ -77,6 +77,7 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
     everything_else = [i for i in items if i not in new_arrivals and i not in on_sale]
 
     all_sizes = sorted({s for i in items for s in (i.get("sizes") or [])})
+    all_sources = sorted({i["source"] for i in items})
 
     def card(i: dict) -> str:
         price_html = ""
@@ -92,7 +93,7 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
         badge = '<span class="badge">Your size</span>' if i.get("size_match") and sizes else ""
         data_sizes = " ".join(sizes)
         return f"""
-        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}">
+        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{i['source']}">
           <div class="thumb" {img_style}>{icon}</div>
           <div class="source">{i['source']}{badge}</div>
           <div class="title">{i['title'] or 'Untitled'}</div>
@@ -164,7 +165,8 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
     background: #eae5d6; color: #5c5645; font-size: 0.58rem; letter-spacing: 0.06em;
     text-transform: uppercase; vertical-align: 1px;
   }}
-  .filters {{ text-align: center; margin-bottom: 36px; }}
+  .filters {{ text-align: center; margin-bottom: 14px; }}
+  .filters:last-of-type {{ margin-bottom: 36px; }}
   .filters-label {{ font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85; margin-bottom: 10px; }}
   .chip {{
     display: inline-block; padding: 5px 14px; margin: 3px; border: 1px solid #ddd6c2;
@@ -181,35 +183,39 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
     <div class="rule-thin"></div>
     <div class="meta">Updated {generated} · {len(items)} pieces across Vinted, eBay, Marrkt &amp; UK stockists</div>
   </div>
-  {render_filter_bar(all_sizes)}
+  {render_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
+  {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
   {section("New today", new_arrivals)}
   {section("On sale", on_sale)}
   {section("Everything else", everything_else, muted=True)}
   <script>
     (function() {{
-      var active = new Set();
+      var state = {{size: new Set(), source: new Set()}};
       var chips = document.querySelectorAll('.chip');
       var cards = document.querySelectorAll('.card');
       function apply() {{
         cards.forEach(function(c) {{
-          if (active.size === 0) {{ c.classList.remove('hidden'); return; }}
           var sizes = (c.dataset.sizes || '').split(' ').filter(Boolean);
           var noSizeInfo = sizes.length === 0;
-          var match = noSizeInfo || sizes.some(function(s) {{ return active.has(s); }});
-          c.classList.toggle('hidden', !match);
+          var sizeMatch = state.size.size === 0 || noSizeInfo ||
+            sizes.some(function(s) {{ return state.size.has(s); }});
+          var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
+          c.classList.toggle('hidden', !(sizeMatch && sourceMatch));
         }});
       }}
       chips.forEach(function(chip) {{
         chip.addEventListener('click', function() {{
-          var size = chip.dataset.size;
-          if (size === '__all__') {{
-            active.clear();
-            chips.forEach(function(c) {{ c.classList.remove('active'); }});
+          var group = chip.dataset.group;
+          var value = chip.dataset.value;
+          var groupChips = document.querySelectorAll('.chip[data-group="' + group + '"]');
+          if (value === '__all__') {{
+            state[group].clear();
+            groupChips.forEach(function(c) {{ c.classList.remove('active'); }});
             chip.classList.add('active');
           }} else {{
-            chips[0].classList.remove('active');
-            if (active.has(size)) {{ active.delete(size); chip.classList.remove('active'); }}
-            else {{ active.add(size); chip.classList.add('active'); }}
+            groupChips[0].classList.remove('active');
+            if (state[group].has(value)) {{ state[group].delete(value); chip.classList.remove('active'); }}
+            else {{ state[group].add(value); chip.classList.add('active'); }}
           }}
           apply();
         }});
