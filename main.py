@@ -7,6 +7,7 @@ serve for free with GitHub Pages.
 Usage: python main.py
 """
 from __future__ import annotations
+import html
 import json
 from pathlib import Path
 from datetime import datetime, timezone
@@ -65,10 +66,11 @@ def collect_resale_items() -> list[dict]:
 def render_chip_bar(label: str, group: str, values: list[str], all_label: str) -> str:
     if not values:
         return ""
-    chips = [f'<button class="chip active" data-group="{group}" data-value="__all__">{all_label}</button>']
+    chips = [f'<button class="chip active" data-group="{group}" data-value="__all__">{html.escape(all_label)}</button>']
     for v in values:
-        chips.append(f'<button class="chip" data-group="{group}" data-value="{v}">{v}</button>')
-    return f'<div class="filters"><div class="filters-label">{label}</div>{"".join(chips)}</div>'
+        esc = html.escape(v)
+        chips.append(f'<button class="chip" data-group="{group}" data-value="{esc}">{esc}</button>')
+    return f'<div class="filters"><div class="filters-label">{html.escape(label)}</div>{"".join(chips)}</div>'
 
 
 def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
@@ -91,9 +93,10 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
         sizes = i.get("sizes") or []
         size_bit = f'<div class="size">{" · ".join(sizes)}</div>' if sizes else ""
         badge = '<span class="badge">Your size</span>' if i.get("size_match") and sizes else ""
-        data_sizes = " ".join(sizes)
+        data_sizes = html.escape(json.dumps(sizes))
+        data_source = html.escape(i['source'])
         return f"""
-        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{i['source']}">
+        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}">
           <div class="thumb" {img_style}>{icon}</div>
           <div class="source">{i['source']}{badge}</div>
           <div class="title">{i['title'] or 'Untitled'}</div>
@@ -195,7 +198,8 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
       var cards = document.querySelectorAll('.card');
       function apply() {{
         cards.forEach(function(c) {{
-          var sizes = (c.dataset.sizes || '').split(' ').filter(Boolean);
+          var sizes = [];
+          try {{ sizes = JSON.parse(c.dataset.sizes || '[]'); }} catch (e) {{}}
           var noSizeInfo = sizes.length === 0;
           var sizeMatch = state.size.size === 0 || noSizeInfo ||
             sizes.some(function(s) {{ return state.size.has(s); }});
