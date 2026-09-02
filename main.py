@@ -198,13 +198,18 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
       var cards = document.querySelectorAll('.card');
       function apply() {{
         cards.forEach(function(c) {{
-          var sizes = [];
-          try {{ sizes = JSON.parse(c.dataset.sizes || '[]'); }} catch (e) {{}}
-          var noSizeInfo = sizes.length === 0;
-          var sizeMatch = state.size.size === 0 || noSizeInfo ||
-            sizes.some(function(s) {{ return state.size.has(s); }});
-          var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
-          c.classList.toggle('hidden', !(sizeMatch && sourceMatch));
+          try {{
+            var sizes = [];
+            try {{ sizes = JSON.parse(c.dataset.sizes || '[]'); }} catch (e) {{}}
+            if (!Array.isArray(sizes)) sizes = [];
+            var noSizeInfo = sizes.length === 0;
+            var sizeMatch = state.size.size === 0 || noSizeInfo ||
+              sizes.some(function(s) {{ return state.size.has(s); }});
+            var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
+            c.classList.toggle('hidden', !(sizeMatch && sourceMatch));
+          }} catch (e) {{
+            console.error('[filter] failed for card', c, e);
+          }}
         }});
       }}
       chips.forEach(function(chip) {{
