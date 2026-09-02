@@ -91,12 +91,22 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
         img_style = f'style="background-image:url(\'{i["image"]}\')"' if i.get("image") else ""
         icon = "" if i.get("image") else '<i class="ti ti-hanger-2"></i>'
         sizes = i.get("sizes") or []
-        size_bit = f'<div class="size">{" · ".join(sizes)}</div>' if sizes else ""
+        # "Unknown" means the source couldn't tell us a size at all (eBay,
+        # HTML-scraped retailers) - distinct from a genuinely one-size item
+        # (ties, scarves) where size_match is True with no sizes to list.
+        size_unknown = not sizes and i.get("size_match") is None
+        if sizes:
+            size_bit = f'<div class="size">{" · ".join(sizes)}</div>'
+        elif size_unknown:
+            size_bit = '<div class="size unknown">Size unknown</div>'
+        else:
+            size_bit = ""
         badge = '<span class="badge">Your size</span>' if i.get("size_match") and sizes else ""
         data_sizes = html.escape(json.dumps(sizes))
         data_source = html.escape(i['source'])
+        data_unknown = "1" if size_unknown else "0"
         return f"""
-        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}">
+        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}">
           <div class="thumb" {img_style}>{icon}</div>
           <div class="source">{i['source']}{badge}</div>
           <div class="title">{i['title'] or 'Untitled'}</div>
@@ -163,6 +173,7 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
   .price .was {{ color: #a39c85; text-decoration: line-through; margin-right: 8px; }}
   .price .now {{ color: #7a3b30; }}
   .size {{ font-size: 0.72rem; color: #a39c85; margin-top: 2px; }}
+  .size.unknown {{ font-style: italic; }}
   .badge {{
     display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 2px;
     background: #eae5d6; color: #5c5645; font-size: 0.58rem; letter-spacing: 0.06em;
@@ -203,7 +214,8 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
             try {{ sizes = JSON.parse(c.dataset.sizes || '[]'); }} catch (e) {{}}
             if (!Array.isArray(sizes)) sizes = [];
             var noSizeInfo = sizes.length === 0;
-            var sizeMatch = state.size.size === 0 || noSizeInfo ||
+            var isUnknownSize = c.dataset.unknown === '1';
+            var sizeMatch = state.size.size === 0 || (noSizeInfo && !isUnknownSize) ||
               sizes.some(function(s) {{ return state.size.has(s); }});
             var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
             c.classList.toggle('hidden', !(sizeMatch && sourceMatch));

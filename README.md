@@ -98,9 +98,10 @@ for tops, collar size, whatever mix you wear). Two things happen with this:
   there's nothing to filter on.
 
 Note: eBay and the HTML-scraped stockists (END., Mr Porter, All Blues Co)
-can't reliably surface size from their listing summaries, so those items
-always show regardless of filter — check the size on the actual listing
-page for those ones.
+can't reliably surface size from their listing summaries. Those items are
+marked "Size unknown" on the card and show under "All sizes", but get
+filtered out like anything else once you pick a specific size — check the
+size on the actual listing page for those ones if you want them included.
 
 ## Adding more stockists
 
