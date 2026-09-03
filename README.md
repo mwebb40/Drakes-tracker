@@ -156,6 +156,17 @@ listings. Only Shopify stores can tell us stock status for certain, so the
 toggle only ever hides items it's actually sure are sold out — Vinted,
 eBay and the HTML-scraped stockists are unaffected by it either way.
 
+## Wishlist
+
+Every card has a "☆ Save" button, and a **"☆ My wishlist"** link in the
+header opens `wishlist.html` — a separate page listing everything you've
+saved, with a remove button per item and a "Clear all". This is purely
+client-side: saved items live in your browser's `localStorage`, keyed by
+each listing's own id, so they survive every hourly regeneration without
+needing a server or database. That also means it's per-browser, not
+synced across devices, and clearing your browser's site data clears it
+too.
+
 ## Adding more stockists
 
 Edit `config.py`. For any Shopify store, find their Drake's collection URL
