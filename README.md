@@ -1,12 +1,12 @@
 # Drake's Tracker
 
-A daily-refreshing dashboard tracking new Drake's listings on **Vinted**,
+An hourly-refreshing dashboard tracking new Drake's listings on **Vinted**,
 **eBay** and **Marrkt**, plus new arrivals and sale price-drops on Drake's
 own site and UK stockists (END., Mr Porter, House of Huntington, All Blues
 Co — edit `config.py` to add more).
 
-It runs for free on GitHub Actions every morning and publishes a static
-page via GitHub Pages — no server to maintain.
+It runs for free on GitHub Actions and publishes a static page via GitHub
+Pages — no server to maintain.
 
 ## How it works
 
@@ -23,9 +23,9 @@ page via GitHub Pages — no server to maintain.
   the "Vinted reliability" section below for what to do if it starts
   getting blocked.
 
-Each run compares the day's results against `data/state.json` (committed
-back to the repo) so the dashboard can show what's genuinely new since
-yesterday, not just everything currently listed.
+Each run compares its results against `data/state.json` (committed back to
+the repo) so the dashboard can show what's genuinely new since the last
+run, not just everything currently listed.
 
 ## Setup
 
@@ -40,11 +40,13 @@ yesterday, not just everything currently listed.
      Secret**.
    - In your GitHub repo: Settings → Secrets and variables → Actions → New
      repository secret. Add `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET`.
-4. That's it — the workflow in `.github/workflows/daily.yml` runs every
-   morning at 06:00 UTC (07:00 UK winter time). You can also trigger a run
-   manually from the repo's **Actions** tab any time ("Run workflow").
+4. That's it — the workflow in `.github/workflows/daily.yml` runs once an
+   hour, on the hour. You can also trigger a run manually from the repo's
+   **Actions** tab any time ("Run workflow"). If Vinted results start
+   disappearing (see "Vinted reliability" below), drop the cron back to
+   something sparser, e.g. `"0 */4 * * *"` for every 4 hours.
 
-## Running locally (to test before relying on the daily job)
+## Running locally (to test before relying on the scheduled job)
 
 ```bash
 pip install -r requirements.txt
