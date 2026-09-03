@@ -17,6 +17,98 @@ from sources import shopify_store, html_store, vinted, ebay
 
 STATE_PATH = Path("data/state.json")
 DASHBOARD_PATH = Path("docs/index.html")
+WISHLIST_PATH = Path("docs/wishlist.html")
+
+BASE_CSS = """
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'EB Garamond', Georgia, serif;
+    max-width: 900px; margin: 0 auto; padding: 48px 20px 80px;
+    background: #f7f4ec; color: #2b2a25;
+  }
+  .masthead { text-align: center; margin-bottom: 40px; }
+  .masthead h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500;
+    font-size: 2.1rem; letter-spacing: 0.03em; margin: 0; text-transform: uppercase;
+  }
+  .rule-thin { width: 42px; height: 1px; background: #8a7a53; margin: 14px auto; }
+  .meta { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8a8574; }
+  .nav-link { color: #7a3b30; text-decoration: none; }
+  .nav-link:hover { text-decoration: underline; }
+
+  .section-label {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.16em;
+    color: #5c5645; margin: 0 0 18px;
+  }
+  .section-label.muted { color: #a39c85; }
+  .empty { font-style: italic; color: #a39c85; font-size: 0.95rem; margin: 0 0 24px; }
+  .rule { height: 1px; background: #ddd6c2; margin: 8px 0 40px; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    column-gap: 20px; row-gap: 32px; margin-bottom: 8px;
+  }
+  .card { position: relative; }
+  .card-link { display: block; text-decoration: none; color: inherit; }
+  .thumb {
+    aspect-ratio: 4/5; background: #eae5d6 center/cover no-repeat;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 10px; color: #a39c85; font-size: 26px; overflow: hidden;
+  }
+  .source { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #8a8574; }
+  .title { font-size: 0.95rem; margin: 4px 0 3px; line-height: 1.35; }
+  .price { font-size: 0.85rem; color: #5c5645; }
+  .price .was { color: #a39c85; text-decoration: line-through; margin-right: 8px; }
+  .price .now { color: #7a3b30; }
+  .size { font-size: 0.72rem; color: #a39c85; margin-top: 2px; }
+  .size.unknown { font-style: italic; }
+  .badge {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 2px;
+    background: #eae5d6; color: #5c5645; font-size: 0.58rem; letter-spacing: 0.06em;
+    text-transform: uppercase; vertical-align: 1px;
+  }
+  .save-btn, .remove-btn {
+    position: absolute; top: 6px; right: 6px; z-index: 1;
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid #ddd6c2;
+    background: rgba(247,244,236,0.92); color: #a39c85; font-size: 15px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-family: inherit; padding: 0;
+  }
+  .save-btn.saved { color: #7a3b30; border-color: #7a3b30; }
+  .remove-btn { color: #7a3b30; }
+  .filter-bars { margin-bottom: 36px; }
+  .filters { text-align: center; margin-bottom: 14px; }
+  .filters:last-child { margin-bottom: 0; }
+  .filters-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85; margin-bottom: 10px; }
+  .filters-collapsible summary {
+    font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85;
+    cursor: pointer; list-style: none; display: inline-block; margin-bottom: 10px;
+  }
+  .filters-collapsible summary::-webkit-details-marker { display: none; }
+  .filters-collapsible summary::after { content: ' ▾'; }
+  .filters-collapsible[open] summary::after { content: ' ▴'; }
+  .filters-collapsible .filters-body { margin-top: 2px; }
+  .chip {
+    display: inline-block; padding: 5px 14px; margin: 3px; border: 1px solid #ddd6c2;
+    border-radius: 999px; font-size: 0.78rem; color: #5c5645; cursor: pointer;
+    background: transparent; font-family: inherit;
+  }
+  .chip.active { background: #2b2a25; border-color: #2b2a25; color: #f7f4ec; }
+  .card.hidden { display: none; }
+"""
+
+WISHLIST_JS_HELPERS = """
+    var WISHLIST_KEY = 'drakes-wishlist-v1';
+    function loadWishlist() {
+      try { return JSON.parse(localStorage.getItem(WISHLIST_KEY) || '{}'); }
+      catch (e) { return {}; }
+    }
+    function saveWishlist(map) {
+      try { localStorage.setItem(WISHLIST_KEY, JSON.stringify(map)); }
+      catch (e) {}
+    }
+"""
 
 
 def load_first_seen() -> dict[str, str]:
@@ -185,14 +277,23 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         data_unknown = "1" if size_unknown else "0"
         data_sold_out = "1" if sold_out else "0"
         data_recency = recency_bucket(i)
+        wish_id = html.escape(i['id'])
+        wish_title = html.escape(i['title'] or 'Untitled')
+        wish_url = html.escape(i['url'])
+        wish_image = html.escape(i['image']) if i.get('image') else ''
+        wish_price = i['price'] if i.get('price') is not None else ''
+        wish_compare = i['compare_at_price'] if i.get('compare_at_price') else ''
         return f"""
-        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-recency="{data_recency}">
-          <div class="thumb" {img_style}>{icon}</div>
-          <div class="source">{i['source']}{badge}</div>
-          <div class="title">{i['title'] or 'Untitled'}</div>
-          <div class="price">{price_html}</div>
-          {size_bit}
-        </a>"""
+        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-recency="{data_recency}">
+          <button type="button" class="save-btn" data-id="{wish_id}" data-title="{wish_title}" data-url="{wish_url}" data-image="{wish_image}" data-source="{data_source}" data-price="{wish_price}" data-compare-price="{wish_compare}" aria-label="Save to wishlist">☆</button>
+          <a class="card-link" href="{i['url']}" target="_blank" rel="noopener">
+            <div class="thumb" {img_style}>{icon}</div>
+            <div class="source">{i['source']}{badge}</div>
+            <div class="title">{i['title'] or 'Untitled'}</div>
+            <div class="price">{price_html}</div>
+            {size_bit}
+          </a>
+        </div>"""
 
     def section(title: str, items_: list[dict], muted: bool = False) -> str:
         cls = "section-label muted" if muted else "section-label"
@@ -214,70 +315,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=EB+Garamond:ital@0;1&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
 <style>
-  :root {{ color-scheme: light; }}
-  * {{ box-sizing: border-box; }}
-  body {{
-    font-family: 'EB Garamond', Georgia, serif;
-    max-width: 900px; margin: 0 auto; padding: 48px 20px 80px;
-    background: #f7f4ec; color: #2b2a25;
-  }}
-  .masthead {{ text-align: center; margin-bottom: 40px; }}
-  .masthead h1 {{
-    font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500;
-    font-size: 2.1rem; letter-spacing: 0.03em; margin: 0; text-transform: uppercase;
-  }}
-  .rule-thin {{ width: 42px; height: 1px; background: #8a7a53; margin: 14px auto; }}
-  .meta {{ font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8a8574; }}
-
-  .section-label {{
-    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.16em;
-    color: #5c5645; margin: 0 0 18px;
-  }}
-  .section-label.muted {{ color: #a39c85; }}
-  .empty {{ font-style: italic; color: #a39c85; font-size: 0.95rem; margin: 0 0 24px; }}
-  .rule {{ height: 1px; background: #ddd6c2; margin: 8px 0 40px; }}
-
-  .grid {{
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    column-gap: 20px; row-gap: 32px; margin-bottom: 8px;
-  }}
-  .card {{ display: block; text-decoration: none; color: inherit; }}
-  .thumb {{
-    aspect-ratio: 4/5; background: #eae5d6 center/cover no-repeat;
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 10px; color: #a39c85; font-size: 26px;
-  }}
-  .source {{ font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #8a8574; }}
-  .title {{ font-size: 0.95rem; margin: 4px 0 3px; line-height: 1.35; }}
-  .price {{ font-size: 0.85rem; color: #5c5645; }}
-  .price .was {{ color: #a39c85; text-decoration: line-through; margin-right: 8px; }}
-  .price .now {{ color: #7a3b30; }}
-  .size {{ font-size: 0.72rem; color: #a39c85; margin-top: 2px; }}
-  .size.unknown {{ font-style: italic; }}
-  .badge {{
-    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 2px;
-    background: #eae5d6; color: #5c5645; font-size: 0.58rem; letter-spacing: 0.06em;
-    text-transform: uppercase; vertical-align: 1px;
-  }}
-  .filter-bars {{ margin-bottom: 36px; }}
-  .filters {{ text-align: center; margin-bottom: 14px; }}
-  .filters:last-child {{ margin-bottom: 0; }}
-  .filters-label {{ font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85; margin-bottom: 10px; }}
-  .filters-collapsible summary {{
-    font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85;
-    cursor: pointer; list-style: none; display: inline-block; margin-bottom: 10px;
-  }}
-  .filters-collapsible summary::-webkit-details-marker {{ display: none; }}
-  .filters-collapsible summary::after {{ content: ' ▾'; }}
-  .filters-collapsible[open] summary::after {{ content: ' ▴'; }}
-  .filters-collapsible .filters-body {{ margin-top: 2px; }}
-  .chip {{
-    display: inline-block; padding: 5px 14px; margin: 3px; border: 1px solid #ddd6c2;
-    border-radius: 999px; font-size: 0.78rem; color: #5c5645; cursor: pointer;
-    background: transparent; font-family: inherit;
-  }}
-  .chip.active {{ background: #2b2a25; border-color: #2b2a25; color: #f7f4ec; }}
-  .card.hidden {{ display: none; }}
+{BASE_CSS}
 </style>
 </head>
 <body>
@@ -285,6 +323,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     <h1>Drake's Tracker</h1>
     <div class="rule-thin"></div>
     <div class="meta">Updated {generated} · {len(items)} pieces across Vinted, eBay, Marrkt &amp; UK stockists</div>
+    <div class="meta" style="margin-top:6px;"><a class="nav-link" href="wishlist.html">☆ My wishlist</a></div>
   </div>
   <div class="filter-bars">
     {render_recency_filter()}
@@ -358,6 +397,170 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
       }});
     }})();
   </script>
+  <script>
+    {WISHLIST_JS_HELPERS}
+    (function() {{
+      var wishlist = loadWishlist();
+      var saveButtons = document.querySelectorAll('.save-btn');
+      function refreshButton(btn) {{
+        var isSaved = !!wishlist[btn.dataset.id];
+        btn.classList.toggle('saved', isSaved);
+        btn.textContent = isSaved ? '★' : '☆';
+        btn.setAttribute('aria-label', isSaved ? 'Remove from wishlist' : 'Save to wishlist');
+      }}
+      saveButtons.forEach(function(btn) {{
+        refreshButton(btn);
+        btn.addEventListener('click', function(e) {{
+          e.preventDefault();
+          e.stopPropagation();
+          var id = btn.dataset.id;
+          if (wishlist[id]) {{
+            delete wishlist[id];
+          }} else {{
+            wishlist[id] = {{
+              title: btn.dataset.title,
+              url: btn.dataset.url,
+              image: btn.dataset.image,
+              source: btn.dataset.source,
+              price: btn.dataset.price ? parseFloat(btn.dataset.price) : null,
+              comparePrice: btn.dataset.comparePrice ? parseFloat(btn.dataset.comparePrice) : null,
+              savedAt: new Date().toISOString()
+            }};
+          }}
+          saveWishlist(wishlist);
+          refreshButton(btn);
+        }});
+      }});
+    }})();
+  </script>
+</body>
+</html>"""
+
+
+def render_wishlist_page() -> str:
+    """Static shell - all the actual content is rendered client-side from
+    localStorage, since there's no server/database here to persist a
+    per-visitor wishlist. Regenerated each run purely to stay in sync with
+    the dashboard's styling/scripts; its own markup never changes."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Wishlist — Drake's Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=EB+Garamond:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<style>
+{BASE_CSS}
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <h1>My Wishlist</h1>
+    <div class="rule-thin"></div>
+    <div class="meta"><a class="nav-link" href="index.html">← Back to tracker</a></div>
+  </div>
+  <div id="wishlist-actions" style="text-align:center; margin-bottom:24px; display:none;">
+    <button type="button" class="chip" id="clear-wishlist">Clear all</button>
+  </div>
+  <p id="wishlist-empty" class="empty" style="text-align:center; display:none;">Nothing saved yet — star an item on the tracker to add it here.</p>
+  <div id="wishlist-grid" class="grid"></div>
+  <script>
+    {WISHLIST_JS_HELPERS}
+    (function() {{
+      var wishlist = loadWishlist();
+      var grid = document.getElementById('wishlist-grid');
+      var emptyMsg = document.getElementById('wishlist-empty');
+      var actions = document.getElementById('wishlist-actions');
+
+      function buildCard(id, item) {{
+        var card = document.createElement('div');
+        card.className = 'card';
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-btn';
+        removeBtn.setAttribute('aria-label', 'Remove from wishlist');
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', function(e) {{
+          e.preventDefault();
+          e.stopPropagation();
+          delete wishlist[id];
+          saveWishlist(wishlist);
+          render();
+        }});
+
+        var link = document.createElement('a');
+        link.className = 'card-link';
+        link.href = item.url || '#';
+        link.target = '_blank';
+        link.rel = 'noopener';
+
+        var thumb = document.createElement('div');
+        thumb.className = 'thumb';
+        if (item.image) {{
+          var img = document.createElement('img');
+          img.src = item.image;
+          img.alt = '';
+          img.style.width = '100%';
+          img.style.height = '100%';
+          img.style.objectFit = 'cover';
+          thumb.appendChild(img);
+        }} else {{
+          thumb.innerHTML = '<i class="ti ti-hanger-2"></i>';
+        }}
+
+        var source = document.createElement('div');
+        source.className = 'source';
+        source.textContent = item.source || '';
+
+        var title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = item.title || 'Untitled';
+
+        var price = document.createElement('div');
+        price.className = 'price';
+        if (item.price) {{
+          var text = '£' + Math.round(item.price);
+          if (item.comparePrice) {{ text = '£' + Math.round(item.comparePrice) + ' → ' + text; }}
+          price.textContent = text;
+        }}
+
+        link.appendChild(thumb);
+        link.appendChild(source);
+        link.appendChild(title);
+        link.appendChild(price);
+        card.appendChild(removeBtn);
+        card.appendChild(link);
+        return card;
+      }}
+
+      function render() {{
+        var ids = Object.keys(wishlist).sort(function(a, b) {{
+          return (wishlist[b].savedAt || '').localeCompare(wishlist[a].savedAt || '');
+        }});
+        grid.innerHTML = '';
+        if (ids.length === 0) {{
+          emptyMsg.style.display = 'block';
+          actions.style.display = 'none';
+          return;
+        }}
+        emptyMsg.style.display = 'none';
+        actions.style.display = 'block';
+        ids.forEach(function(id) {{ grid.appendChild(buildCard(id, wishlist[id])); }});
+      }}
+
+      document.getElementById('clear-wishlist').addEventListener('click', function() {{
+        if (!confirm('Remove all saved items?')) return;
+        wishlist = {{}};
+        saveWishlist(wishlist);
+        render();
+      }});
+
+      render();
+    }})();
+  </script>
 </body>
 </html>"""
 
@@ -371,6 +574,7 @@ def main() -> None:
 
     DASHBOARD_PATH.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_PATH.write_text(render_dashboard(all_items, first_seen))
+    WISHLIST_PATH.write_text(render_wishlist_page())
 
     save_state(all_items, first_seen)
     print(f"Done. {len(all_items)} items total, dashboard written to {DASHBOARD_PATH}")
