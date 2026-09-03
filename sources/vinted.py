@@ -43,7 +43,11 @@ def _fetch_one(session: requests.Session, domain: str, search_text: str, target_
     for it in data.get("items", []):
         size = it.get("size_title")  # Vinted's own free-text size field, e.g. "M", "16", "One size"
         sizes = [size] if size else []
-        size_match = (not sizes) or any(s in target_sizes for s in sizes)
+        # No size_title at all is ambiguous - could be a seller who left it
+        # blank, or a non-clothing hit (a book, poster, record) our keyword
+        # search happened to catch - either way it's not safe to assume
+        # "fits everyone" the way an explicit "One size" would be.
+        size_match = None if not sizes else any(s in target_sizes for s in sizes)
         items.append({
             "source": "Vinted",
             "type": "resale",

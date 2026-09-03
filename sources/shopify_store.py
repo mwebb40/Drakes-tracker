@@ -60,12 +60,19 @@ def fetch_all_products_filtered_by_vendor(base_url: str, vendor_name: str, per_p
     return products
 
 
-def _extract_sizes(product: dict) -> list[str]:
+def _extract_sizes(product: dict) -> tuple[list[str], bool]:
     """Pull the available (in-stock) size values from a Shopify product's variants.
 
     Shopify stores size under whichever option is literally named "Size"
     (case-insensitive); falls back to the variant title if there's no
     matching option, which covers most single-option stores too.
+
+    Returns (sizes, has_size_option). has_size_option tells the caller
+    whether this product has a real size dimension at all (a jumper, say)
+    as opposed to genuinely being one-size (a tie) - a product can have a
+    size option and still come back with an empty sizes list if every size
+    is currently sold out, which is a different situation from "no sizing
+    applies here" and needs to be flagged differently on the dashboard.
     """
     options = product.get("options", [])
     size_option_index = None
@@ -87,7 +94,7 @@ def _extract_sizes(product: dict) -> list[str]:
             val = v.get("option1") or v.get("title")
         if val and val.lower() != "default title" and val not in sizes:
             sizes.append(val)
-    return sizes
+    return sizes, size_option_index is not None
 
 
 def normalize(store_name: str, base_url: str, raw_products: list[dict], lookback_days: int,
@@ -104,10 +111,17 @@ def normalize(store_name: str, base_url: str, raw_products: list[dict], lookback
         max_compare = max(compare_prices) if compare_prices else None
         on_sale = bool(max_compare and min_price and max_compare > min_price)
 
-        sizes = _extract_sizes(p)
-        # No size option at all (ties, scarves, pocket squares) counts as
-        # always matching — there's nothing to filter on.
-        size_match = (not sizes) or any(s in target_sizes for s in sizes)
+        sizes, has_size_option = _extract_sizes(p)
+        if sizes:
+            size_match = any(s in target_sizes for s in sizes)
+        elif has_size_option:
+            # Has a real size dimension but nothing currently in stock -
+            # unknown which size(s) it'll come back in, not "fits everyone".
+            size_match = None
+        else:
+            # No size option at all (ties, scarves, pocket squares) counts as
+            # always matching — there's nothing to filter on.
+            size_match = True
 
         published_at = p.get("published_at") or p.get("created_at")
         is_new = False
