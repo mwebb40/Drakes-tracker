@@ -201,9 +201,9 @@ brand (usually `store.com/collections/<brand>` or similar) and add:
 
 For non-Shopify stores, add a `platform: "html"` entry with a `search_url`
 pointing at their brand page for that brand — expect to need to tune
-`sources/html_store.py` for that specific site's markup. RRL currently has
-an empty `"retailers"` list (Vinted/eBay coverage works standalone) —
-add stockists there the same way once you've identified specific stores.
+`sources/html_store.py` for that specific site's markup. RRL currently
+tracks Marrkt (`collections/rrl`); add further stockists there the same
+way as you identify them.
 
 ## Vinted reliability
 

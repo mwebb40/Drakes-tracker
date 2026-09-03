@@ -92,10 +92,13 @@ BRANDS = [
     {
         "name": "RRL",
         "retailers": [
-            # No stockists added yet - Vinted/eBay coverage works standalone.
-            # Add a retailer here (same shape as Drake's above) once you've
-            # identified specific stores carrying RRL and confirmed whether
-            # they're Shopify-based or need an HTML scrape.
+            {
+                "name": "Marrkt (pre-owned, but also lists rare new-old-stock)",
+                "platform": "shopify",
+                "base_url": "https://www.marrkt.com",
+                "collection": "rrl",
+            },
+            # Add more stockists here as you identify them.
         ],
         "vinted": {
             "enabled": True,
