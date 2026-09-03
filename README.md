@@ -58,18 +58,12 @@ open docs/index.html   # or just double-click it
 
 ## Search terms
 
-Vinted and eBay are matched by keyword search rather than a curated brand
-page, so what you search for matters. Both take a **list** of terms in
-`config.py` — each one is searched separately and results are merged
-together with duplicates removed (the same item can genuinely match more
-than one term):
+eBay is matched by keyword search, so what you search for matters. It
+takes a **list** of terms in `config.py` — each one is searched separately
+and results are merged together with duplicates removed (the same item can
+genuinely match more than one term):
 
 ```python
-VINTED = {
-    ...
-    "search_terms": ["Drake's", "Drakes London"],
-}
-
 EBAY = {
     ...
     "search_terms": ["Drake's London", "Drakes tie", "Drakes London scarf"],
@@ -82,10 +76,28 @@ the brand name from the title but kept a specific item type. Each extra
 term is one more request per run, so there's no real ceiling, just
 diminishing returns once you're covering the obvious variants.
 
-The retailer stockists (Drake's, Marrkt, END., etc.) work differently: each
-one is a fixed collection/brand page on that store's own site rather than a
-keyword search, so there's no term list to edit for them — see the
-"Adding more stockists" section below instead.
+Vinted works differently: `VINTED["brand"]` (default `"Drake's"`) is
+resolved to Vinted's internal brand ID via the same lookup their own
+brand-filter box uses, then results are filtered to that brand directly —
+catches listings that never repeat "Drake's" in the title, and it's one
+request per run instead of one per search term. This relies on an
+unofficial, unverified endpoint, so if it ever stops resolving (Vinted
+changes it, or the brand name doesn't match), the tracker prints why and
+falls back automatically to keyword search over `VINTED["search_terms"]`
+— set `"brand": None` to always use keyword search instead.
+
+```python
+VINTED = {
+    ...
+    "brand": "Drake's",
+    "search_terms": ["Drake's", "Drakes London"],  # fallback / used if brand is None
+}
+```
+
+The retailer stockists (Drake's, Marrkt, END., etc.) work differently
+again: each one is a fixed collection/brand page on that store's own site
+rather than a keyword search, so there's no term list to edit for them —
+see the "Adding more stockists" section below instead.
 
 ## Filtering by size
 
