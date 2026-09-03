@@ -73,6 +73,13 @@ def render_chip_bar(label: str, group: str, values: list[str], all_label: str) -
     return f'<div class="filters"><div class="filters-label">{html.escape(label)}</div>{"".join(chips)}</div>'
 
 
+def render_sold_out_toggle(any_sold_out: bool) -> str:
+    if not any_sold_out:
+        return ""
+    return ('<div class="filters"><div class="filters-label">Availability</div>'
+            '<button class="chip" id="hide-sold-out">Hide sold out</button></div>')
+
+
 def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
     new_arrivals = [i for i in items if i["id"] not in previously_seen or i.get("is_new")]
     on_sale = [i for i in items if i.get("on_sale")]
@@ -80,6 +87,7 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
 
     all_sizes = sorted({s for i in items for s in (i.get("sizes") or [])})
     all_sources = sorted({i["source"] for i in items})
+    any_sold_out = any(i.get("sold_out") is True for i in items)
 
     def card(i: dict) -> str:
         price_html = ""
@@ -91,12 +99,16 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
         img_style = f'style="background-image:url(\'{i["image"]}\')"' if i.get("image") else ""
         icon = "" if i.get("image") else '<i class="ti ti-hanger-2"></i>'
         sizes = i.get("sizes") or []
+        sold_out = i.get("sold_out") is True
         # "Unknown" means the source couldn't tell us a size at all (eBay,
-        # HTML-scraped retailers) - distinct from a genuinely one-size item
-        # (ties, scarves) where size_match is True with no sizes to list.
+        # HTML-scraped retailers, a sold-out Shopify product) - distinct from
+        # a genuinely one-size item (ties, scarves) where size_match is True
+        # with no sizes to list.
         size_unknown = not sizes and i.get("size_match") is None
         if sizes:
             size_bit = f'<div class="size">{" · ".join(sizes)}</div>'
+        elif sold_out:
+            size_bit = '<div class="size unknown">Sold out</div>'
         elif size_unknown:
             size_bit = '<div class="size unknown">Size unknown</div>'
         else:
@@ -105,8 +117,9 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
         data_sizes = html.escape(json.dumps(sizes))
         data_source = html.escape(i['source'])
         data_unknown = "1" if size_unknown else "0"
+        data_sold_out = "1" if sold_out else "0"
         return f"""
-        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}">
+        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}">
           <div class="thumb" {img_style}>{icon}</div>
           <div class="source">{i['source']}{badge}</div>
           <div class="title">{i['title'] or 'Untitled'}</div>
@@ -199,13 +212,15 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
   </div>
   {render_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
   {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
+  {render_sold_out_toggle(any_sold_out)}
   {section("New today", new_arrivals)}
   {section("On sale", on_sale)}
   {section("Everything else", everything_else, muted=True)}
   <script>
     (function() {{
       var state = {{size: new Set(), source: new Set()}};
-      var chips = document.querySelectorAll('.chip');
+      var hideSoldOut = false;
+      var chips = document.querySelectorAll('.chip[data-group]');
       var cards = document.querySelectorAll('.card');
       function apply() {{
         cards.forEach(function(c) {{
@@ -218,10 +233,19 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
             var sizeMatch = state.size.size === 0 || (noSizeInfo && !isUnknownSize) ||
               sizes.some(function(s) {{ return state.size.has(s); }});
             var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
-            c.classList.toggle('hidden', !(sizeMatch && sourceMatch));
+            var soldOutOk = !(hideSoldOut && c.dataset.soldOut === '1');
+            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && soldOutOk));
           }} catch (e) {{
             console.error('[filter] failed for card', c, e);
           }}
+        }});
+      }}
+      var soldOutToggle = document.getElementById('hide-sold-out');
+      if (soldOutToggle) {{
+        soldOutToggle.addEventListener('click', function() {{
+          hideSoldOut = !hideSoldOut;
+          soldOutToggle.classList.toggle('active', hideSoldOut);
+          apply();
         }});
       }}
       chips.forEach(function(chip) {{

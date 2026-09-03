@@ -102,6 +102,17 @@ can't reliably surface size from their listing summaries. Those items are
 marked "Size unknown" on the card and show under "All sizes", but get
 filtered out like anything else once you pick a specific size — check the
 size on the actual listing page for those ones if you want them included.
+A Shopify product that's sold out in every size (common on House of
+Huntington's past-season stock) is marked "Sold out" instead — same
+filtering behaviour, just a more specific reason.
+
+## Filtering out sold-out items
+
+Whenever a run turns up at least one Shopify product with zero available
+variants, a **"Hide sold out"** toggle appears in its own row above the
+listings. Only Shopify stores can tell us stock status for certain, so the
+toggle only ever hides items it's actually sure are sold out — Vinted,
+eBay and the HTML-scraped stockists are unaffected by it either way.
 
 ## Adding more stockists
 
