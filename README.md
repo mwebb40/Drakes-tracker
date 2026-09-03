@@ -76,21 +76,27 @@ the brand name from the title but kept a specific item type. Each extra
 term is one more request per run, so there's no real ceiling, just
 diminishing returns once you're covering the obvious variants.
 
-Vinted works differently: `VINTED["brand"]` (default `"Drake's"`) is
-resolved to Vinted's internal brand ID via the same lookup their own
-brand-filter box uses, then results are filtered to that brand directly —
-catches listings that never repeat "Drake's" in the title, and it's one
-request per run instead of one per search term. This relies on an
-unofficial, unverified endpoint, so if it ever stops resolving (Vinted
-changes it, or the brand name doesn't match), the tracker prints why and
-falls back automatically to keyword search over `VINTED["search_terms"]`
-— set `"brand": None` to always use keyword search instead.
+Vinted also supports filtering by brand instead of keyword
+(`VINTED["brand"]`, resolved to Vinted's internal brand ID via the same
+lookup their own brand-filter box uses) — **currently disabled** (`None`)
+by default, though. It was tried against the real endpoint and didn't
+behave as expected: searching for "Drake's" returned an unrelated brand
+with no exact match, and even a successfully-resolved `brand_ids[]` filter
+came back as an unfiltered feed rather than narrowing anything, so neither
+half of it can currently be trusted. If you want to revive this, the
+reliable way is to open Vinted in a browser, search for the brand, apply
+their own Brand filter, and check your browser's network tab for the
+actual request(s) it makes — then update `sources/vinted.py`'s
+`_resolve_brand_id`/`_fetch_by_brand` to match. Until then, keyword search
+over `VINTED["search_terms"]` (used automatically whenever `brand` is
+`None`, and as an automatic fallback if a brand ever fails to resolve) is
+what actually runs:
 
 ```python
 VINTED = {
     ...
-    "brand": "Drake's",
-    "search_terms": ["Drake's", "Drakes London"],  # fallback / used if brand is None
+    "brand": None,  # set to e.g. "Drake's" only once the real endpoint is confirmed
+    "search_terms": ["Drake's", "Drakes London"],
 }
 ```
 

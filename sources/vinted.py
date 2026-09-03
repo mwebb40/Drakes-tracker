@@ -86,13 +86,18 @@ def _resolve_brand_id(session: requests.Session, domain: str, brand_name: str) -
               f"falling back to keyword search.")
         return None
 
+    # Only trust an exact (case-insensitive) title match. Guessing at the
+    # "closest" result when there's no exact match is how this went wrong in
+    # practice: a search for "Drake's" came back with unrelated brands and no
+    # exact hit, and blindly taking the first result silently filtered every
+    # Vinted result to the wrong brand instead of falling back safely.
     brand_lower = brand_name.strip().lower()
     exact = next((b for b in brands if (b.get("title") or "").strip().lower() == brand_lower), None)
-    chosen = exact or brands[0]
     if not exact:
-        print(f"[vinted] no exact brand match for '{brand_name}', using closest "
-              f"result: '{chosen.get('title')}' (id={chosen.get('id')})")
-    return chosen.get("id")
+        print(f"[vinted] no exact brand match for '{brand_name}' among "
+              f"{[b.get('title') for b in brands]} — falling back to keyword search.")
+        return None
+    return exact.get("id")
 
 
 def _fetch_by_brand(session: requests.Session, domain: str, brand_id: int,
