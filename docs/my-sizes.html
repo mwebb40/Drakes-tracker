@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Sizes — Drake's Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=EB+Garamond:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<style>
+
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'EB Garamond', Georgia, serif;
+    max-width: 900px; margin: 0 auto; padding: 48px 20px 80px;
+    background: #f7f4ec; color: #2b2a25;
+  }
+  .masthead { text-align: center; margin-bottom: 40px; }
+  .masthead h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500;
+    font-size: 2.1rem; letter-spacing: 0.03em; margin: 0; text-transform: uppercase;
+  }
+  .rule-thin { width: 42px; height: 1px; background: #8a7a53; margin: 14px auto; }
+  .meta { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: #8a8574; }
+  .nav-link { color: #7a3b30; text-decoration: none; }
+  .nav-link:hover { text-decoration: underline; }
+
+  .section-label {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.16em;
+    color: #5c5645; margin: 0 0 18px;
+  }
+  .section-label.muted { color: #a39c85; }
+  .empty { font-style: italic; color: #a39c85; font-size: 0.95rem; margin: 0 0 24px; }
+  .rule { height: 1px; background: #ddd6c2; margin: 8px 0 40px; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    column-gap: 20px; row-gap: 32px; margin-bottom: 8px;
+  }
+  .card { position: relative; }
+  .card-link { display: block; text-decoration: none; color: inherit; }
+  .thumb {
+    aspect-ratio: 4/5; background: #eae5d6 center/cover no-repeat;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 10px; color: #a39c85; font-size: 26px; overflow: hidden;
+  }
+  .source { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: #8a8574; }
+  .title { font-size: 0.95rem; margin: 4px 0 3px; line-height: 1.35; }
+  .price { font-size: 0.85rem; color: #5c5645; }
+  .price .was { color: #a39c85; text-decoration: line-through; margin-right: 8px; }
+  .price .now { color: #7a3b30; }
+  .size { font-size: 0.72rem; color: #a39c85; margin-top: 2px; }
+  .size.unknown { font-style: italic; }
+  .badge {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 2px;
+    background: #eae5d6; color: #5c5645; font-size: 0.58rem; letter-spacing: 0.06em;
+    text-transform: uppercase; vertical-align: 1px;
+  }
+  .save-btn, .remove-btn {
+    position: absolute; top: 6px; right: 6px; z-index: 1;
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid #ddd6c2;
+    background: rgba(247,244,236,0.92); color: #a39c85; font-size: 15px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-family: inherit; padding: 0;
+  }
+  .save-btn.saved { color: #7a3b30; border-color: #7a3b30; }
+  .remove-btn { color: #7a3b30; }
+  .filter-bars { margin-bottom: 36px; }
+  .filters { text-align: center; margin-bottom: 14px; }
+  .filters:last-child { margin-bottom: 0; }
+  .filters-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85; margin-bottom: 10px; }
+  .filters-collapsible summary {
+    font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85;
+    cursor: pointer; list-style: none; display: inline-block; margin-bottom: 10px;
+  }
+  .filters-collapsible summary::-webkit-details-marker { display: none; }
+  .filters-collapsible summary::after { content: ' ▾'; }
+  .filters-collapsible[open] summary::after { content: ' ▴'; }
+  .filters-collapsible .filters-body { margin-top: 2px; }
+  .chip {
+    display: inline-block; padding: 5px 14px; margin: 3px; border: 1px solid #ddd6c2;
+    border-radius: 999px; font-size: 0.78rem; color: #5c5645; cursor: pointer;
+    background: transparent; font-family: inherit;
+  }
+  .chip.active { background: #2b2a25; border-color: #2b2a25; color: #f7f4ec; }
+  .card.hidden { display: none; }
+
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <h1>My Sizes</h1>
+    <div class="rule-thin"></div>
+    <div class="meta"><a class="nav-link" href="index.html">← Back to tracker</a></div>
+  </div>
+  <p class="empty" style="text-align:center; font-style:normal; margin-bottom:28px;">Tap every size you'd wear, based on what's actually listed right now. Saved in this browser and used by the "My sizes only" toggle on the tracker.</p>
+  <div class="filters" style="margin-bottom:36px;"><button type="button" class="chip" data-size="10">10</button><button type="button" class="chip" data-size="14&quot; / 36 cm">14&quot; / 36 cm</button><button type="button" class="chip" data-size="14.5 in | 37 cm">14.5 in | 37 cm</button><button type="button" class="chip" data-size="14.5&quot; / 37 cm">14.5&quot; / 37 cm</button><button type="button" class="chip" data-size="15 3/4 - 40">15 3/4 - 40</button><button type="button" class="chip" data-size="15 in | 38 cm">15 in | 38 cm</button><button type="button" class="chip" data-size="15&quot; / 38 cm">15&quot; / 38 cm</button><button type="button" class="chip" data-size="15-38">15-38</button><button type="button" class="chip" data-size="15.5 - 39">15.5 - 39</button><button type="button" class="chip" data-size="15.5 in | 39 cm">15.5 in | 39 cm</button><button type="button" class="chip" data-size="15.5&quot; / 39 cm">15.5&quot; / 39 cm</button><button type="button" class="chip" data-size="16 in | 40 cm">16 in | 40 cm</button><button type="button" class="chip" data-size="16&quot; / 41 cm">16&quot; / 41 cm</button><button type="button" class="chip" data-size="16-41">16-41</button><button type="button" class="chip" data-size="16.5&quot; / 42 cm">16.5&quot; / 42 cm</button><button type="button" class="chip" data-size="17&quot; / 43 cm">17&quot; / 43 cm</button><button type="button" class="chip" data-size="17.5 - 44">17.5 - 44</button><button type="button" class="chip" data-size="17.5 in | 43 cm">17.5 in | 43 cm</button><button type="button" class="chip" data-size="17.5-44">17.5-44</button><button type="button" class="chip" data-size="28&quot;">28&quot;</button><button type="button" class="chip" data-size="29&quot;">29&quot;</button><button type="button" class="chip" data-size="30">30</button><button type="button" class="chip" data-size="30&quot;">30&quot;</button><button type="button" class="chip" data-size="31&quot;">31&quot;</button><button type="button" class="chip" data-size="32">32</button><button type="button" class="chip" data-size="32”">32”</button><button type="button" class="chip" data-size="33">33</button><button type="button" class="chip" data-size="36">36</button><button type="button" class="chip" data-size="38">38</button><button type="button" class="chip" data-size="3XL UK-US 46 / IT 56">3XL UK-US 46 / IT 56</button><button type="button" class="chip" data-size="42">42</button><button type="button" class="chip" data-size="46”">46”</button><button type="button" class="chip" data-size="52">52</button><button type="button" class="chip" data-size="6XL">6XL</button><button type="button" class="chip" data-size="9">9</button><button type="button" class="chip" data-size="Black">Black</button><button type="button" class="chip" data-size="Blue">Blue</button><button type="button" class="chip" data-size="Brown">Brown</button><button type="button" class="chip" data-size="Dark Brown">Dark Brown</button><button type="button" class="chip" data-size="EU 46">EU 46</button><button type="button" class="chip" data-size="EU 50">EU 50</button><button type="button" class="chip" data-size="EU 54">EU 54</button><button type="button" class="chip" data-size="EU 58">EU 58</button><button type="button" class="chip" data-size="Ecru">Ecru</button><button type="button" class="chip" data-size="Green">Green</button><button type="button" class="chip" data-size="Grey">Grey</button><button type="button" class="chip" data-size="L">L</button><button type="button" class="chip" data-size="Large / UK-US 40 / IT 50">Large / UK-US 40 / IT 50</button><button type="button" class="chip" data-size="Light Blue">Light Blue</button><button type="button" class="chip" data-size="M">M</button><button type="button" class="chip" data-size="Medium / UK-US 38 / IT 48">Medium / UK-US 38 / IT 48</button><button type="button" class="chip" data-size="Mustard">Mustard</button><button type="button" class="chip" data-size="Navy">Navy</button><button type="button" class="chip" data-size="OS">OS</button><button type="button" class="chip" data-size="Olive Green">Olive Green</button><button type="button" class="chip" data-size="One size">One size</button><button type="button" class="chip" data-size="Pink">Pink</button><button type="button" class="chip" data-size="Purple">Purple</button><button type="button" class="chip" data-size="Red">Red</button><button type="button" class="chip" data-size="S">S</button><button type="button" class="chip" data-size="S / UK 8-10">S / UK 8-10</button><button type="button" class="chip" data-size="Small (S)">Small (S)</button><button type="button" class="chip" data-size="Small / UK-US 36 / IT 46">Small / UK-US 36 / IT 46</button><button type="button" class="chip" data-size="Teal">Teal</button><button type="button" class="chip" data-size="Turquoise">Turquoise</button><button type="button" class="chip" data-size="UK 10">UK 10</button><button type="button" class="chip" data-size="UK 12">UK 12</button><button type="button" class="chip" data-size="UK 12.5 / EU 46.5">UK 12.5 / EU 46.5</button><button type="button" class="chip" data-size="UK 46">UK 46</button><button type="button" class="chip" data-size="W28">W28</button><button type="button" class="chip" data-size="W30">W30</button><button type="button" class="chip" data-size="W31">W31</button><button type="button" class="chip" data-size="W32">W32</button><button type="button" class="chip" data-size="W38">W38</button><button type="button" class="chip" data-size="XL">XL</button><button type="button" class="chip" data-size="XL / UK-US 42 / IT 52">XL / UK-US 42 / IT 52</button><button type="button" class="chip" data-size="XS">XS</button><button type="button" class="chip" data-size="XS / UK-US 34 / IT 44">XS / UK-US 34 / IT 44</button><button type="button" class="chip" data-size="XXL">XXL</button><button type="button" class="chip" data-size="XXL / UK-US 44 / IT 54">XXL / UK-US 44 / IT 54</button><button type="button" class="chip" data-size="XXS">XXS</button><button type="button" class="chip" data-size="XXS / UK-US 32 / IT 42">XXS / UK-US 32 / IT 42</button><button type="button" class="chip" data-size="XXXL">XXXL</button></div><div style="text-align:center;"><button type="button" class="chip" id="clear-my-sizes">Clear all</button></div>
+  <script>
+    
+    var MY_SIZES_KEY = 'drakes-my-sizes-v1';
+    // null means "never configured" (fall back to TARGET_SIZES), as
+    // opposed to an explicit [] meaning "deliberately no sizes selected".
+    function loadMySizes() {
+      try {
+        var raw = localStorage.getItem(MY_SIZES_KEY);
+        if (raw === null) return null;
+        var parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch (e) { return null; }
+    }
+    function saveMySizes(list) {
+      try { localStorage.setItem(MY_SIZES_KEY, JSON.stringify(list)); }
+      catch (e) {}
+    }
+
+    (function() {
+      var FALLBACK = ["M", "L", "16"];
+      var stored = loadMySizes();
+      var mySizes = stored === null ? FALLBACK.slice() : stored;
+      var chips = document.querySelectorAll('.chip[data-size]');
+
+      function refresh() {
+        chips.forEach(function(c) {
+          c.classList.toggle('active', mySizes.indexOf(c.dataset.size) !== -1);
+        });
+      }
+      refresh();
+
+      chips.forEach(function(chip) {
+        chip.addEventListener('click', function() {
+          var size = chip.dataset.size;
+          var idx = mySizes.indexOf(size);
+          if (idx === -1) { mySizes.push(size); }
+          else { mySizes.splice(idx, 1); }
+          saveMySizes(mySizes);
+          refresh();
+        });
+      });
+
+      var clearBtn = document.getElementById('clear-my-sizes');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+          mySizes = [];
+          saveMySizes(mySizes);
+          refresh();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

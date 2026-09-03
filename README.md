@@ -148,6 +148,17 @@ A Shopify product that's sold out in every size (common on House of
 Huntington's past-season stock) is marked "Sold out" instead — same
 filtering behaviour, just a more specific reason.
 
+`TARGET_SIZES` only takes effect on the next run and needs a code change,
+though — for something adjustable without touching `config.py`, there's
+also **"My sizes"** (linked from the header): a page listing every size
+actually seen from sellers in the latest run (not a fixed list), which you
+tick to build your own set, saved in your browser (`localStorage`, so it's
+per-browser, not synced across devices). The **"My sizes only"** toggle on
+the main page then filters to exactly that set with one click, same
+filtering behaviour as picking those sizes by hand in the size filter.
+Before you've visited "My sizes" for the first time, the toggle falls back
+to whatever's in `TARGET_SIZES`.
+
 ## Filtering out sold-out items
 
 Whenever a run turns up at least one Shopify product with zero available

@@ -18,6 +18,7 @@ from sources import shopify_store, html_store, vinted, ebay
 STATE_PATH = Path("data/state.json")
 DASHBOARD_PATH = Path("docs/index.html")
 WISHLIST_PATH = Path("docs/wishlist.html")
+MY_SIZES_PATH = Path("docs/my-sizes.html")
 
 BASE_CSS = """
   :root { color-scheme: light; }
@@ -106,6 +107,24 @@ WISHLIST_JS_HELPERS = """
     }
     function saveWishlist(map) {
       try { localStorage.setItem(WISHLIST_KEY, JSON.stringify(map)); }
+      catch (e) {}
+    }
+"""
+
+MY_SIZES_JS_HELPERS = """
+    var MY_SIZES_KEY = 'drakes-my-sizes-v1';
+    // null means "never configured" (fall back to TARGET_SIZES), as
+    // opposed to an explicit [] meaning "deliberately no sizes selected".
+    function loadMySizes() {
+      try {
+        var raw = localStorage.getItem(MY_SIZES_KEY);
+        if (raw === null) return null;
+        var parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : null;
+      } catch (e) { return null; }
+    }
+    function saveMySizes(list) {
+      try { localStorage.setItem(MY_SIZES_KEY, JSON.stringify(list)); }
       catch (e) {}
     }
 """
@@ -218,6 +237,15 @@ def render_recency_filter() -> str:
     )
 
 
+def render_my_sizes_toggle() -> str:
+    return (
+        '<div class="filters"><div class="filters-label">Your sizes</div>'
+        '<button type="button" class="chip" id="my-sizes-toggle">My sizes only</button>'
+        '<a class="nav-link" href="my-sizes.html" style="font-size:0.72rem; margin-left:8px;">edit list</a>'
+        '</div>'
+    )
+
+
 def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     now = datetime.now(timezone.utc)
 
@@ -304,6 +332,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
                 f'<div class="rule"></div>')
 
     generated = datetime.now(timezone.utc).strftime("%-d %B %Y, %H:%M UTC")
+    target_sizes_json = json.dumps(config.TARGET_SIZES)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -323,11 +352,16 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     <h1>Drake's Tracker</h1>
     <div class="rule-thin"></div>
     <div class="meta">Updated {generated} · {len(items)} pieces across Vinted, eBay, Marrkt &amp; UK stockists</div>
-    <div class="meta" style="margin-top:6px;"><a class="nav-link" href="wishlist.html">☆ My wishlist</a></div>
+    <div class="meta" style="margin-top:6px;">
+      <a class="nav-link" href="wishlist.html">☆ My wishlist</a>
+      &nbsp;·&nbsp;
+      <a class="nav-link" href="my-sizes.html">My sizes</a>
+    </div>
   </div>
   <div class="filter-bars">
     {render_recency_filter()}
     {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
+    {render_my_sizes_toggle()}
     {render_collapsible_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
     {render_sold_out_toggle(any_sold_out)}
   </div>
@@ -335,11 +369,13 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
   {section("On sale", on_sale)}
   {section("Everything else", everything_else, muted=True)}
   <script>
+    {MY_SIZES_JS_HELPERS}
     (function() {{
       var state = {{size: new Set(), source: new Set(), recency: 'all'}};
       var hideSoldOut = false;
       var chips = document.querySelectorAll('.chip[data-group]');
       var cards = document.querySelectorAll('.card');
+      var FALLBACK_TARGET_SIZES = {target_sizes_json};
       function apply() {{
         cards.forEach(function(c) {{
           try {{
@@ -366,6 +402,33 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         soldOutToggle.addEventListener('click', function() {{
           hideSoldOut = !hideSoldOut;
           soldOutToggle.classList.toggle('active', hideSoldOut);
+          apply();
+        }});
+      }}
+      var mySizesToggle = document.getElementById('my-sizes-toggle');
+      var mySizesOn = false;
+      if (mySizesToggle) {{
+        mySizesToggle.addEventListener('click', function() {{
+          var sizeChips = document.querySelectorAll('.chip[data-group="size"]');
+          if (!mySizesOn) {{
+            var stored = loadMySizes();
+            var mySizes = stored === null ? FALLBACK_TARGET_SIZES : stored;
+            if (mySizes.length === 0) {{
+              alert('No sizes selected yet - visit "My sizes" to choose which sizes to include.');
+              return;
+            }}
+            state.size = new Set(mySizes);
+            sizeChips.forEach(function(c) {{
+              c.classList.toggle('active', c.dataset.value !== '__all__' && mySizes.indexOf(c.dataset.value) !== -1);
+            }});
+            mySizesToggle.classList.add('active');
+            mySizesOn = true;
+          }} else {{
+            state.size.clear();
+            sizeChips.forEach(function(c) {{ c.classList.toggle('active', c.dataset.value === '__all__'); }});
+            mySizesToggle.classList.remove('active');
+            mySizesOn = false;
+          }}
           apply();
         }});
       }}
@@ -565,6 +628,84 @@ def render_wishlist_page() -> str:
 </html>"""
 
 
+def render_my_sizes_page(all_sizes: list[str]) -> str:
+    """Lets you pick which sizes to include from what's actually listed by
+    sellers in the latest run (not a fixed list), saved to localStorage and
+    read by the "My sizes only" toggle on the main dashboard. Falls back to
+    config.TARGET_SIZES as a starting point on first visit (nothing saved
+    yet), same as the "Your size" badge already computed server-side."""
+    target_sizes_json = json.dumps(config.TARGET_SIZES)
+    chips = "".join(
+        f'<button type="button" class="chip" data-size="{html.escape(s)}">{html.escape(s)}</button>'
+        for s in all_sizes
+    )
+    body = (
+        '<p class="empty" style="text-align:center;">No sizes seen in the latest run yet - check back after the next update.</p>'
+        if not all_sizes else
+        f'<div class="filters" style="margin-bottom:36px;">{chips}</div>'
+        '<div style="text-align:center;"><button type="button" class="chip" id="clear-my-sizes">Clear all</button></div>'
+    )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Sizes — Drake's Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=EB+Garamond:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<style>
+{BASE_CSS}
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <h1>My Sizes</h1>
+    <div class="rule-thin"></div>
+    <div class="meta"><a class="nav-link" href="index.html">← Back to tracker</a></div>
+  </div>
+  <p class="empty" style="text-align:center; font-style:normal; margin-bottom:28px;">Tap every size you'd wear, based on what's actually listed right now. Saved in this browser and used by the "My sizes only" toggle on the tracker.</p>
+  {body}
+  <script>
+    {MY_SIZES_JS_HELPERS}
+    (function() {{
+      var FALLBACK = {target_sizes_json};
+      var stored = loadMySizes();
+      var mySizes = stored === null ? FALLBACK.slice() : stored;
+      var chips = document.querySelectorAll('.chip[data-size]');
+
+      function refresh() {{
+        chips.forEach(function(c) {{
+          c.classList.toggle('active', mySizes.indexOf(c.dataset.size) !== -1);
+        }});
+      }}
+      refresh();
+
+      chips.forEach(function(chip) {{
+        chip.addEventListener('click', function() {{
+          var size = chip.dataset.size;
+          var idx = mySizes.indexOf(size);
+          if (idx === -1) {{ mySizes.push(size); }}
+          else {{ mySizes.splice(idx, 1); }}
+          saveMySizes(mySizes);
+          refresh();
+        }});
+      }});
+
+      var clearBtn = document.getElementById('clear-my-sizes');
+      if (clearBtn) {{
+        clearBtn.addEventListener('click', function() {{
+          mySizes = [];
+          saveMySizes(mySizes);
+          refresh();
+        }});
+      }}
+    }})();
+  </script>
+</body>
+</html>"""
+
+
 def main() -> None:
     first_seen = load_first_seen()
 
@@ -572,9 +713,12 @@ def main() -> None:
     resale_items = collect_resale_items()
     all_items = retailer_items + resale_items
 
+    all_sizes = sorted({s for i in all_items for s in (i.get("sizes") or [])})
+
     DASHBOARD_PATH.parent.mkdir(parents=True, exist_ok=True)
     DASHBOARD_PATH.write_text(render_dashboard(all_items, first_seen))
     WISHLIST_PATH.write_text(render_wishlist_page())
+    MY_SIZES_PATH.write_text(render_my_sizes_page(all_sizes))
 
     save_state(all_items, first_seen)
     print(f"Done. {len(all_items)} items total, dashboard written to {DASHBOARD_PATH}")
