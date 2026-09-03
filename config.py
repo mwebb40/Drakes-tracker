@@ -66,9 +66,18 @@ RETAILERS = [
 VINTED = {
     "enabled": True,
     "domain": "vinted.co.uk",
-    # One or more search terms — each is searched separately and results are
-    # merged/deduplicated. More terms = more requests per run, so keep this
-    # reasonably tight (each extra term is another call to Vinted's endpoint).
+    # If set, this is looked up via Vinted's own brand-filter endpoint and
+    # results are filtered to that brand directly - narrower and more
+    # complete than keyword search (catches listings that don't repeat the
+    # brand name in the title), and only one request per run instead of one
+    # per search term. This uses the same unverified/unofficial API as
+    # everything else Vinted-related here — if the lookup doesn't resolve
+    # (Vinted changes the endpoint, brand name doesn't match, etc.) it
+    # prints why and falls back to `search_terms` below automatically.
+    "brand": "Drake's",
+    # Fallback (and used directly if `brand` is None/unset): one or more
+    # search terms, each searched separately with results merged/deduplicated.
+    # More terms = more requests per run, so keep this reasonably tight.
     "search_terms": ["Drake's", "Drakes London"],
     # Vinted sits behind Datadome anti-bot protection. The direct endpoint
     # below works without login for casual/low-frequency use but can start
