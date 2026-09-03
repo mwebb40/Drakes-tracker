@@ -41,10 +41,13 @@ run, not just everything currently listed.
    - In your GitHub repo: Settings → Secrets and variables → Actions → New
      repository secret. Add `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET`.
 4. That's it — the workflow in `.github/workflows/daily.yml` runs once an
-   hour, on the hour. You can also trigger a run manually from the repo's
-   **Actions** tab any time ("Run workflow"). If Vinted results start
-   disappearing (see "Vinted reliability" below), drop the cron back to
-   something sparser, e.g. `"0 */4 * * *"` for every 4 hours.
+   hour, at :13 past (deliberately not on the exact hour - GitHub's own
+   scheduler is most likely to delay or silently skip runs set for the top
+   of the hour, since that's when every other repo's hourly cron also
+   fires). You can also trigger a run manually from the repo's **Actions**
+   tab any time ("Run workflow"). If Vinted results start disappearing (see
+   "Vinted reliability" below), drop the cron back to something sparser,
+   e.g. `"13 */4 * * *"` for every 4 hours.
 
 ## Running locally (to test before relying on the scheduled job)
 

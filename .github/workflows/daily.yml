@@ -2,12 +2,19 @@ name: Drake's tracker run
 
 on:
   schedule:
-    # Runs on the hour, every hour. Note: this hits Vinted's search endpoint
-    # 24x more often than a daily run, which raises the odds of tripping
-    # their Datadome anti-bot protection (see README's "Vinted reliability"
-    # section) - drop back to a sparser cron (e.g. "0 */4 * * *") if Vinted
-    # results start disappearing.
-    - cron: "0 * * * *"
+    # Runs once an hour, at :13 rather than exactly on the hour. GitHub's own
+    # docs warn that schedules set to the exact top of the hour ("0 * * * *")
+    # are the most likely to be delayed or silently dropped, since that's
+    # when the largest share of every other repo's hourly cron also fires -
+    # this is exactly what happened here: the schedule sat for 3+ hours
+    # without firing once despite the workflow being active and correctly
+    # configured on the default branch. Offsetting the minute avoids that
+    # pile-up. Separately: this hits Vinted's search endpoint 24x more often
+    # than a daily run, which raises the odds of tripping their Datadome
+    # anti-bot protection (see README's "Vinted reliability" section) - drop
+    # back to a sparser cron (e.g. "13 */4 * * *") if Vinted results start
+    # disappearing.
+    - cron: "13 * * * *"
   workflow_dispatch: {}  # lets you trigger a manual run from the Actions tab
 
 permissions:
