@@ -110,6 +110,7 @@ def normalize(store_name: str, base_url: str, raw_products: list[dict], lookback
         min_price = min(prices) if prices else None
         max_compare = max(compare_prices) if compare_prices else None
         on_sale = bool(max_compare and min_price and max_compare > min_price)
+        sold_out = not any(v.get("available") for v in variants)
 
         sizes, has_size_option = _extract_sizes(p)
         if sizes:
@@ -147,6 +148,7 @@ def normalize(store_name: str, base_url: str, raw_products: list[dict], lookback
             "is_new": is_new,
             "sizes": sizes,
             "size_match": size_match,
+            "sold_out": sold_out,
             "image": image,
             "id": f"{store_name}:{p.get('id')}",
             "fetched_at": datetime.now(timezone.utc).isoformat(),
