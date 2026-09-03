@@ -56,7 +56,7 @@ def collect_resale_items() -> list[dict]:
     if config.VINTED.get("enabled"):
         items.extend(vinted.fetch(
             config.VINTED["domain"], config.VINTED["search_terms"], config.TARGET_SIZES,
-            brand=config.VINTED.get("brand"),
+            brand_ids=config.VINTED.get("brand_ids"),
         ))
     if config.EBAY.get("enabled"):
         items.extend(ebay.fetch(

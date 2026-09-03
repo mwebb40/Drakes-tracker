@@ -76,29 +76,33 @@ the brand name from the title but kept a specific item type. Each extra
 term is one more request per run, so there's no real ceiling, just
 diminishing returns once you're covering the obvious variants.
 
-Vinted also supports filtering by brand instead of keyword
-(`VINTED["brand"]`, resolved to Vinted's internal brand ID via the same
-lookup their own brand-filter box uses) — **currently disabled** (`None`)
-by default, though. It was tried against the real endpoint and didn't
-behave as expected: searching for "Drake's" returned an unrelated brand
-with no exact match, and even a successfully-resolved `brand_ids[]` filter
-came back as an unfiltered feed rather than narrowing anything, so neither
-half of it can currently be trusted. If you want to revive this, the
-reliable way is to open Vinted in a browser, search for the brand, apply
-their own Brand filter, and check your browser's network tab for the
-actual request(s) it makes — then update `sources/vinted.py`'s
-`_resolve_brand_id`/`_fetch_by_brand` to match. Until then, keyword search
-over `VINTED["search_terms"]` (used automatically whenever `brand` is
-`None`, and as an automatic fallback if a brand ever fails to resolve) is
-what actually runs:
+Vinted works differently: it's filtered by `VINTED["brand_ids"]`, Vinted's
+own internal numeric brand ID(s), instead of keyword search — narrower and
+more complete than matching on title text, since it doesn't depend on
+"Drake's" appearing in the listing title, and it doesn't pick up unrelated
+noise that just happens to contain the word "Drake" (the rapper, Drake
+Waterfowl outdoor gear, etc.). Find a brand's ID from its own page URL on
+Vinted, e.g. `vinted.co.uk/brand/389025-drakes` → `389025`:
 
 ```python
 VINTED = {
     ...
-    "brand": None,  # set to e.g. "Drake's" only once the real endpoint is confirmed
-    "search_terms": ["Drake's", "Drakes London"],
+    "brand_ids": [389025],
+    "search_terms": [""],  # fallback only, used if brand_ids is empty/unset
 }
 ```
+
+`brand_ids` is treated as the sole filter whenever it's non-empty —
+`search_terms` is only consulted as a fallback if you clear `brand_ids`
+entirely. This still relies on an unofficial, undocumented Vinted query
+parameter (`brand_ids[]` on their catalog search endpoint) that this
+project has gotten wrong once already — an earlier version tried to
+resolve a brand *name* to an ID via a guessed lookup endpoint and matched
+the wrong brand in production. Hardcoding the ID straight from the brand's
+own page URL, as above, avoids that specific failure mode, but the
+`brand_ids[]` filter itself is still unverified against a live response
+from this environment — check that the first run after changing it
+actually looks narrower than the old keyword search, not just different.
 
 The retailer stockists (Drake's, Marrkt, END., etc.) work differently
 again: each one is a fixed collection/brand page on that store's own site

@@ -61,47 +61,8 @@ def _catalog_search(session: requests.Session, domain: str, params: dict) -> lis
     return resp.json().get("items", [])
 
 
-def _resolve_brand_id(session: requests.Session, domain: str, brand_name: str) -> int | None:
-    """Look up Vinted's internal numeric ID for a brand name, the same way
-    their own site's brand filter box does. This is unverified against a
-    live Vinted response (unofficial API, no network access to test from
-    here) - if the endpoint or response shape has changed, this returns
-    None and the caller falls back to keyword search instead of breaking.
-    """
-    try:
-        resp = session.get(
-            f"https://www.{domain}/api/v2/brands",
-            params={"search_text": brand_name, "per_page": 20},
-            timeout=20,
-        )
-        resp.raise_for_status()
-        brands = resp.json().get("brands", [])
-    except (requests.RequestException, ValueError) as e:
-        print(f"[vinted] brand lookup for '{brand_name}' failed ({e}) — "
-              f"falling back to keyword search.")
-        return None
-
-    if not brands:
-        print(f"[vinted] brand lookup for '{brand_name}' returned no matches — "
-              f"falling back to keyword search.")
-        return None
-
-    # Only trust an exact (case-insensitive) title match. Guessing at the
-    # "closest" result when there's no exact match is how this went wrong in
-    # practice: a search for "Drake's" came back with unrelated brands and no
-    # exact hit, and blindly taking the first result silently filtered every
-    # Vinted result to the wrong brand instead of falling back safely.
-    brand_lower = brand_name.strip().lower()
-    exact = next((b for b in brands if (b.get("title") or "").strip().lower() == brand_lower), None)
-    if not exact:
-        print(f"[vinted] no exact brand match for '{brand_name}' among "
-              f"{[b.get('title') for b in brands]} — falling back to keyword search.")
-        return None
-    return exact.get("id")
-
-
-def _fetch_by_brand(session: requests.Session, domain: str, brand_id: int,
-                     target_sizes: list[str], per_page: int) -> list[dict]:
+def _fetch_by_brand_id(session: requests.Session, domain: str, brand_id: int,
+                        target_sizes: list[str], per_page: int) -> list[dict]:
     raw = _catalog_search(session, domain, {
         "brand_ids[]": brand_id,
         "order": "newest_first",
@@ -121,16 +82,19 @@ def _fetch_by_keyword(session: requests.Session, domain: str, search_text: str,
 
 
 def fetch(domain: str, search_terms: list[str] | str, target_sizes: list[str] | None = None,
-          per_page: int = 60, brand: str | None = None) -> list[dict]:
-    """If `brand` is given, resolves it to Vinted's internal brand ID and
-    filters the catalog by that brand directly - narrower and more complete
-    than keyword search, and only one request instead of one per term.
+          per_page: int = 60, brand_ids: list[int] | None = None) -> list[dict]:
+    """If `brand_ids` is given (Vinted's own internal numeric brand IDs -
+    find one from a brand's page URL, e.g. vinted.co.uk/brand/389025-drakes
+    -> 389025), filters the catalog directly by brand_ids[] - narrower and
+    more complete than keyword search since it doesn't depend on the brand
+    name appearing in the listing title, and it's one request per ID
+    instead of one per search term. Each ID's results are merged and
+    deduplicated by listing ID.
+
     Falls back to the keyword `search_terms` loop (single string or list,
-    each term searched separately and merged/deduplicated) if the brand
-    can't be resolved, so an unverified assumption about Vinted's private
-    brand-lookup endpoint can't take the whole source down."""
-    if isinstance(search_terms, str):
-        search_terms = [search_terms]
+    each term searched separately and merged/deduplicated) only when
+    `brand_ids` is empty/unset - a configured brand_ids list is treated as
+    the sole filter, not something to silently fall back away from."""
     target_sizes = target_sizes or []
 
     session = requests.Session()
@@ -147,20 +111,26 @@ def fetch(domain: str, search_terms: list[str] | str, target_sizes: list[str] | 
     seen_ids = set()
     items = []
 
-    if brand:
-        brand_id = _resolve_brand_id(session, domain, brand)
-        if brand_id is not None:
+    if brand_ids:
+        for brand_id in brand_ids:
             try:
-                for it in _fetch_by_brand(session, domain, brand_id, target_sizes, per_page):
-                    if it["id"] not in seen_ids:
-                        seen_ids.add(it["id"])
-                        items.append(it)
-                return items
+                batch = _fetch_by_brand_id(session, domain, brand_id, target_sizes, per_page)
             except requests.RequestException as e:
-                print(f"[vinted] brand search for '{brand}' (id={brand_id}) failed ({e}) — "
-                      f"falling back to keyword search.")
+                print(f"[vinted] brand search for id={brand_id} failed ({e}) — "
+                      f"likely blocked by Datadome. See README for fallback options.")
+                continue
+            for it in batch:
+                if it["id"] not in seen_ids:
+                    seen_ids.add(it["id"])
+                    items.append(it)
+            time.sleep(1)  # small gap between requests, politer to the anti-bot system
+        return items
 
+    if isinstance(search_terms, str):
+        search_terms = [search_terms]
     for term in search_terms:
+        if not term:
+            continue  # skip blank placeholder terms (e.g. when brand_ids is the intended filter)
         try:
             batch = _fetch_by_keyword(session, domain, term, target_sizes, per_page)
         except requests.RequestException as e:

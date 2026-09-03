@@ -66,21 +66,23 @@ RETAILERS = [
 VINTED = {
     "enabled": True,
     "domain": "vinted.co.uk",
-    # If set, this is looked up via Vinted's own brand-filter endpoint and
-    # results are filtered to that brand directly instead of by keyword.
-    # DISABLED (None) for now: tried this against the real endpoint and it
-    # didn't behave as guessed — the lookup returned an unrelated brand for
-    # "Drake's" with no exact match, and even a resolved brand_ids[] filter
-    # on the catalog search came back as an unfiltered feed rather than
-    # erroring, so a "successful" resolution can't currently be trusted
-    # either. Needs the real endpoint/param names confirmed from a browser's
-    # network tab (search Vinted, apply the Brand filter, inspect the
-    # request) before turning this back on.
-    "brand": None,
-    # Used directly since `brand` is off above: one or more search terms,
-    # each searched separately with results merged/deduplicated. More terms
-    # = more requests per run, so keep this reasonably tight.
-    "search_terms": ["Drake's", "Drakes London"],
+    # Vinted's own internal numeric brand ID(s) for Drake's - found from the
+    # brand's actual page URL: vinted.co.uk/brand/389025-drakes -> 389025.
+    # Filtering by brand_ids[] instead of keyword search cuts out noise from
+    # unrelated listings that just contain the word "Drake"/"Drake's" (Drake
+    # the rapper, Drake Waterfowl outdoor gear, etc. - see git history for
+    # what that noise looked like). Treated as the sole filter whenever it's
+    # non-empty; `search_terms` below is only used as a fallback if this is
+    # empty/unset. An earlier attempt at this resolved a brand *name* to an
+    # ID via a guessed lookup endpoint and got it wrong in production
+    # (matched "adidas") - this ID was found directly from Vinted's own
+    # brand page instead, not guessed, but the brand_ids[] catalog filter
+    # itself is still unverified against a live response from here, so
+    # check the first run's Vinted results look right before trusting it.
+    "brand_ids": [389025],
+    # Fallback: used only if `brand_ids` above is empty/unset. One or more
+    # search terms, each searched separately with results merged/deduplicated.
+    "search_terms": [""],
     # Vinted sits behind Datadome anti-bot protection. The direct endpoint
     # below works without login for casual/low-frequency use but can start
     # returning 401/403 if it decides your traffic looks automated. See
