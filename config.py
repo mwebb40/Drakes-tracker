@@ -1,111 +1,117 @@
 """
-Central config for the Drake's tracker.
-Add/remove stockists here — no other code changes needed for Shopify-based sites.
+Central config for the tracker - a list of BRANDS, each with its own
+retail stockists, Vinted brand ID(s), and eBay search terms. Add a new
+brand by adding an entry to BRANDS; no other code changes needed for
+Shopify-based retailers or for Vinted/eBay coverage.
 """
-
-BRAND_NAME = "Drake's"
 
 # How many days back counts as "new" when a store doesn't give us a
 # proper diff to work from (first run, or a store without stable dates).
 LOOKBACK_DAYS = 2
 
+# Shared across all brands: Vinted has one search domain, and one eBay
+# developer app covers searches for every brand.
+VINTED_DOMAIN = "vinted.co.uk"
+EBAY_SITE = "EBAY-GB"
+EBAY_CLIENT_ID_ENV = "EBAY_CLIENT_ID"
+EBAY_CLIENT_SECRET_ENV = "EBAY_CLIENT_SECRET"
+
 # ---------------------------------------------------------------------------
-# 1. RETAIL STOCKISTS (sell NEW stock; we track new arrivals + sale price drops)
+# BRANDS
 #
-# `collection` is the store's Shopify collection handle for Drake's, i.e. the
-# bit in the URL: https://shop.com/collections/<handle>
-# If a store doesn't have a dedicated Drake's collection, use vendor_filter
-# instead, which pulls /products.json and filters by vendor name client-side
-# (slower, works on any Shopify store regardless of collection setup).
-#
-# platform: "shopify" (uses the public /products.json trick) or "html"
-# (generic keyword scrape of a search/sale page — more fragile, best-effort).
+# Each entry:
+#   "name"      - shown on the dashboard (source labels, the brand filter).
+#   "retailers" - stockists selling NEW stock; we track new arrivals + sale
+#                 price drops. `collection` is the store's Shopify collection
+#                 handle for this brand, i.e. the bit in the URL:
+#                 https://shop.com/collections/<handle>. platform: "shopify"
+#                 (public /products.json feed) or "html" (generic keyword
+#                 scrape of a search/sale page - more fragile, best-effort).
+#   "vinted"    - brand_ids (Vinted's own internal numeric brand ID(s), found
+#                 from the brand's page URL, e.g. vinted.co.uk/brand/389025-
+#                 drakes -> 389025) filters the catalog directly - narrower
+#                 and more complete than keyword search, and doesn't depend
+#                 on the brand name appearing in the listing title. Treated
+#                 as the sole filter whenever non-empty; search_terms is
+#                 only used as a fallback if brand_ids is empty/unset.
+#   "ebay"      - one or more search terms, each searched separately with
+#                 results merged/deduplicated. category_id: leave None to
+#                 search all categories.
 # ---------------------------------------------------------------------------
-RETAILERS = [
+BRANDS = [
     {
-        "name": "Drake's (official)",
-        "platform": "shopify",
-        "base_url": "https://uk.drakes.com",
-        "collection": "clothing",  # adjust/add more collections if needed
+        "name": "Drake's",
+        "retailers": [
+            {
+                "name": "Drake's (official)",
+                "platform": "shopify",
+                "base_url": "https://uk.drakes.com",
+                "collection": "clothing",  # adjust/add more collections if needed
+            },
+            {
+                "name": "Marrkt (pre-owned, but also lists rare new-old-stock)",
+                "platform": "shopify",
+                "base_url": "https://www.marrkt.com",
+                "collection": "drakes",
+            },
+            {
+                "name": "House of Huntington (past-season outlet)",
+                "platform": "shopify",
+                "base_url": "https://houseofhuntington.com",
+                "collection": "drakes-london-menswear",
+            },
+            {
+                "name": "END.",
+                "platform": "html",
+                "search_url": "https://www.endclothing.com/gb/brands/drake-s",
+            },
+            {
+                "name": "Mr Porter",
+                "platform": "html",
+                "search_url": "https://www.mrporter.com/en-gb/mens/designer/drakes",
+            },
+            {
+                "name": "All Blues Co",
+                "platform": "html",
+                "search_url": "https://allbluescostore.com/product-tag/drakes-menswear-and-accessories/",
+            },
+            # Add more UK stockists here, e.g. Trunk Clothiers, Oi Polloi, The Bureau Belfast:
+            # {"name": "Trunk Clothiers", "platform": "html", "search_url": "https://www.trunkclothiers.com/..."},
+        ],
+        "vinted": {
+            "enabled": True,
+            "brand_ids": [389025],  # vinted.co.uk/brand/389025-drakes
+            "search_terms": [""],  # fallback only, used if brand_ids is empty/unset
+        },
+        "ebay": {
+            "enabled": True,
+            "search_terms": ["Drake's London", "Drakes tie", "Drakes London scarf"],
+            "category_id": None,
+        },
     },
     {
-        "name": "Marrkt (pre-owned, but also lists rare new-old-stock)",
-        "platform": "shopify",
-        "base_url": "https://www.marrkt.com",
-        "collection": "drakes",
+        "name": "RRL",
+        "retailers": [
+            # No stockists added yet - Vinted/eBay coverage works standalone.
+            # Add a retailer here (same shape as Drake's above) once you've
+            # identified specific stores carrying RRL and confirmed whether
+            # they're Shopify-based or need an HTML scrape.
+        ],
+        "vinted": {
+            "enabled": True,
+            "brand_ids": [5179168],  # vinted.co.uk/brand/5179168 - "Double RL by Ralph Lauren"
+            "search_terms": ["RRL", "Double RL", "RRL Ralph Lauren"],
+        },
+        "ebay": {
+            "enabled": True,
+            "search_terms": ["RRL Ralph Lauren", "Double RL", "RRL denim"],
+            "category_id": None,
+        },
     },
-    {
-        "name": "House of Huntington (past-season outlet)",
-        "platform": "shopify",
-        "base_url": "https://houseofhuntington.com",
-        "collection": "drakes-london-menswear",
-    },
-    {
-        "name": "END.",
-        "platform": "html",
-        "search_url": "https://www.endclothing.com/gb/brands/drake-s",
-    },
-    {
-        "name": "Mr Porter",
-        "platform": "html",
-        "search_url": "https://www.mrporter.com/en-gb/mens/designer/drakes",
-    },
-    {
-        "name": "All Blues Co",
-        "platform": "html",
-        "search_url": "https://allbluescostore.com/product-tag/drakes-menswear-and-accessories/",
-    },
-    # Add more UK stockists here, e.g. Trunk Clothiers, Oi Polloi, The Bureau Belfast:
-    # {"name": "Trunk Clothiers", "platform": "html", "search_url": "https://www.trunkclothiers.com/..."},
 ]
 
 # ---------------------------------------------------------------------------
-# 2. SECONDHAND / RESALE MARKETPLACES
-# ---------------------------------------------------------------------------
-
-VINTED = {
-    "enabled": True,
-    "domain": "vinted.co.uk",
-    # Vinted's own internal numeric brand ID(s) for Drake's - found from the
-    # brand's actual page URL: vinted.co.uk/brand/389025-drakes -> 389025.
-    # Filtering by brand_ids[] instead of keyword search cuts out noise from
-    # unrelated listings that just contain the word "Drake"/"Drake's" (Drake
-    # the rapper, Drake Waterfowl outdoor gear, etc. - see git history for
-    # what that noise looked like). Treated as the sole filter whenever it's
-    # non-empty; `search_terms` below is only used as a fallback if this is
-    # empty/unset. An earlier attempt at this resolved a brand *name* to an
-    # ID via a guessed lookup endpoint and got it wrong in production
-    # (matched "adidas") - this ID was found directly from Vinted's own
-    # brand page instead, not guessed, but the brand_ids[] catalog filter
-    # itself is still unverified against a live response from here, so
-    # check the first run's Vinted results look right before trusting it.
-    "brand_ids": [389025],
-    # Fallback: used only if `brand_ids` above is empty/unset. One or more
-    # search terms, each searched separately with results merged/deduplicated.
-    "search_terms": [""],
-    # Vinted sits behind Datadome anti-bot protection. The direct endpoint
-    # below works without login for casual/low-frequency use but can start
-    # returning 401/403 if it decides your traffic looks automated. See
-    "notes": "See README for fallback options if this starts failing.",
-}
-
-EBAY = {
-    "enabled": True,
-    "site": "EBAY-GB",
-    # One or more search terms — each is searched separately and results are
-    # merged/deduplicated.
-    "search_terms": ["Drake's London", "Drakes tie", "Drakes London scarf"],
-    # Category 57988 = Men's Ties; leave as None to search all categories.
-    "category_id": None,
-    # Requires your own free eBay Developer account (see README).
-    "client_id_env": "EBAY_CLIENT_ID",
-    "client_secret_env": "EBAY_CLIENT_SECRET",
-}
-
-MARRKT_URL = "https://www.marrkt.com/collections/drakes"
-
-# ---------------------------------------------------------------------------
-# 3. YOUR SIZES
+# YOUR SIZES
 #
 # Items matching one of these get a "your size" flag on the dashboard.
 # This does NOT hide other sizes — everything still shows, with a filter
@@ -118,4 +124,3 @@ MARRKT_URL = "https://www.marrkt.com/collections/drakes"
 #   Ties/scarves/pocket squares are one-size, so they always match.
 # ---------------------------------------------------------------------------
 TARGET_SIZES = ["M", "L", "16"]
-

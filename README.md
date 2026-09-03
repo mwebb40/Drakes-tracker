@@ -1,9 +1,11 @@
 # Drake's Tracker
 
-An hourly-refreshing dashboard tracking new Drake's listings on **Vinted**,
-**eBay** and **Marrkt**, plus new arrivals and sale price-drops on Drake's
-own site and UK stockists (END., Mr Porter, House of Huntington, All Blues
-Co — edit `config.py` to add more).
+An hourly-refreshing dashboard tracking new listings across multiple
+brands (currently Drake's and RRL — edit `config.py`'s `BRANDS` list to
+add more) on **Vinted** and **eBay**, plus new arrivals and sale
+price-drops on each brand's own retail stockists where configured (right
+now that's Drake's own site, Marrkt, House of Huntington, END., Mr Porter
+and All Blues Co).
 
 It runs for free on GitHub Actions and publishes a static page via GitHub
 Pages — no server to maintain.
@@ -60,18 +62,29 @@ python main.py
 open docs/index.html   # or just double-click it
 ```
 
+## Adding a brand
+
+`config.py`'s `BRANDS` is a list — each entry is one brand's full setup
+(retail stockists, Vinted brand ID(s), eBay search terms). Add a brand by
+adding an entry with the same shape as the existing ones (Drake's, RRL);
+no other code changes needed. Every item picks up a `brand` field from
+whichever `BRANDS` entry produced it, and the dashboard gets a **"Filter
+by brand"** chip row automatically whenever more than one brand's items
+are present in a run — everything else (sections, size/source/recency
+filters, sold-out, wishlist, "My sizes") works the same across brands.
+
 ## Search terms
 
-eBay is matched by keyword search, so what you search for matters. It
-takes a **list** of terms in `config.py` — each one is searched separately
-and results are merged together with duplicates removed (the same item can
-genuinely match more than one term):
+Each brand's `ebay` config takes a **list** of search terms — each one is
+searched separately and results are merged together with duplicates
+removed (the same item can genuinely match more than one term):
 
 ```python
-EBAY = {
-    ...
+"ebay": {
+    "enabled": True,
     "search_terms": ["Drake's London", "Drakes tie", "Drakes London scarf"],
-}
+    "category_id": None,
+},
 ```
 
 Add as many as you like — e.g. split out `"Drakes cardigan"` or
@@ -80,20 +93,21 @@ the brand name from the title but kept a specific item type. Each extra
 term is one more request per run, so there's no real ceiling, just
 diminishing returns once you're covering the obvious variants.
 
-Vinted works differently: it's filtered by `VINTED["brand_ids"]`, Vinted's
-own internal numeric brand ID(s), instead of keyword search — narrower and
-more complete than matching on title text, since it doesn't depend on
-"Drake's" appearing in the listing title, and it doesn't pick up unrelated
-noise that just happens to contain the word "Drake" (the rapper, Drake
-Waterfowl outdoor gear, etc.). Find a brand's ID from its own page URL on
-Vinted, e.g. `vinted.co.uk/brand/389025-drakes` → `389025`:
+Vinted works differently: it's filtered by each brand's `vinted.brand_ids`
+— Vinted's own internal numeric brand ID(s) — instead of keyword search:
+narrower and more complete than matching on title text, since it doesn't
+depend on the brand name appearing in the listing title, and it doesn't
+pick up unrelated noise that just happens to contain the same word (e.g.
+"Drake" the rapper, Drake Waterfowl outdoor gear, when searching for
+Drake's). Find a brand's ID from its own page URL on Vinted, e.g.
+`vinted.co.uk/brand/389025-drakes` → `389025`:
 
 ```python
-VINTED = {
-    ...
+"vinted": {
+    "enabled": True,
     "brand_ids": [389025],
     "search_terms": [""],  # fallback only, used if brand_ids is empty/unset
-}
+},
 ```
 
 `brand_ids` is treated as the sole filter whenever it's non-empty —
@@ -103,15 +117,12 @@ parameter (`brand_ids[]` on their catalog search endpoint) that this
 project has gotten wrong once already — an earlier version tried to
 resolve a brand *name* to an ID via a guessed lookup endpoint and matched
 the wrong brand in production. Hardcoding the ID straight from the brand's
-own page URL, as above, avoids that specific failure mode, but the
-`brand_ids[]` filter itself is still unverified against a live response
-from this environment — check that the first run after changing it
-actually looks narrower than the old keyword search, not just different.
+own page URL, as above, avoids that specific failure mode.
 
-The retailer stockists (Drake's, Marrkt, END., etc.) work differently
-again: each one is a fixed collection/brand page on that store's own site
-rather than a keyword search, so there's no term list to edit for them —
-see the "Adding more stockists" section below instead.
+Each brand's retail stockists work differently again: each one is a fixed
+collection/brand page on that store's own site rather than a keyword
+search, so there's no term list to edit for them — see "Adding more
+stockists" below instead.
 
 ## Filtering by how new something is
 
@@ -180,16 +191,19 @@ too.
 
 ## Adding more stockists
 
-Edit `config.py`. For any Shopify store, find their Drake's collection URL
-(usually `store.com/collections/drakes` or similar) and add:
+Edit `config.py` — add to the `"retailers"` list under the relevant brand
+in `BRANDS`. For any Shopify store, find their collection URL for that
+brand (usually `store.com/collections/<brand>` or similar) and add:
 
 ```python
 {"name": "New Store", "platform": "shopify", "base_url": "https://store.com", "collection": "drakes"},
 ```
 
 For non-Shopify stores, add a `platform: "html"` entry with a `search_url`
-pointing at their Drake's/brand page — expect to need to tune
-`sources/html_store.py` for that specific site's markup.
+pointing at their brand page for that brand — expect to need to tune
+`sources/html_store.py` for that specific site's markup. RRL currently has
+an empty `"retailers"` list (Vinted/eBay coverage works standalone) —
+add stockists there the same way once you've identified specific stores.
 
 ## Vinted reliability
 

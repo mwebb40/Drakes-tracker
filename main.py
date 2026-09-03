@@ -165,31 +165,47 @@ def save_state(all_items: list[dict], first_seen: dict[str, str]) -> None:
 
 def collect_retailer_items() -> list[dict]:
     items = []
-    for store in config.RETAILERS:
-        try:
-            if store["platform"] == "shopify":
-                raw = shopify_store.fetch_collection(store["base_url"], store["collection"])
-                items.extend(shopify_store.normalize(
-                    store["name"], store["base_url"], raw, config.LOOKBACK_DAYS, config.TARGET_SIZES))
-            elif store["platform"] == "html":
-                items.extend(html_store.fetch(store["name"], store["search_url"]))
-        except Exception as e:
-            print(f"[main] {store['name']} failed: {e}")
+    for brand in config.BRANDS:
+        for store in brand["retailers"]:
+            try:
+                if store["platform"] == "shopify":
+                    raw = shopify_store.fetch_collection(store["base_url"], store["collection"])
+                    batch = shopify_store.normalize(
+                        store["name"], store["base_url"], raw, config.LOOKBACK_DAYS, config.TARGET_SIZES)
+                elif store["platform"] == "html":
+                    batch = html_store.fetch(store["name"], store["search_url"])
+                else:
+                    continue
+                for item in batch:
+                    item["brand"] = brand["name"]
+                items.extend(batch)
+            except Exception as e:
+                print(f"[main] {store['name']} failed: {e}")
     return items
 
 
 def collect_resale_items() -> list[dict]:
     items = []
-    if config.VINTED.get("enabled"):
-        items.extend(vinted.fetch(
-            config.VINTED["domain"], config.VINTED["search_terms"], config.TARGET_SIZES,
-            brand_ids=config.VINTED.get("brand_ids"),
-        ))
-    if config.EBAY.get("enabled"):
-        items.extend(ebay.fetch(
-            config.EBAY["search_terms"], config.EBAY["site"], config.EBAY["category_id"],
-            config.EBAY["client_id_env"], config.EBAY["client_secret_env"],
-        ))
+    for brand in config.BRANDS:
+        vinted_cfg = brand.get("vinted") or {}
+        if vinted_cfg.get("enabled"):
+            batch = vinted.fetch(
+                config.VINTED_DOMAIN, vinted_cfg.get("search_terms", [""]), config.TARGET_SIZES,
+                brand_ids=vinted_cfg.get("brand_ids"),
+            )
+            for item in batch:
+                item["brand"] = brand["name"]
+            items.extend(batch)
+
+        ebay_cfg = brand.get("ebay") or {}
+        if ebay_cfg.get("enabled"):
+            batch = ebay.fetch(
+                ebay_cfg["search_terms"], config.EBAY_SITE, ebay_cfg.get("category_id"),
+                config.EBAY_CLIENT_ID_ENV, config.EBAY_CLIENT_SECRET_ENV,
+            )
+            for item in batch:
+                item["brand"] = brand["name"]
+            items.extend(batch)
     return items
 
 
@@ -273,6 +289,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
 
     all_sizes = sorted({s for i in items for s in (i.get("sizes") or [])})
     all_sources = sorted({i["source"] for i in items})
+    all_brands = sorted({i.get("brand", "Unknown") for i in items})
     any_sold_out = any(i.get("sold_out") is True for i in items)
 
     def card(i: dict) -> str:
@@ -302,6 +319,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         badge = '<span class="badge">Your size</span>' if i.get("size_match") and sizes else ""
         data_sizes = html.escape(json.dumps(sizes))
         data_source = html.escape(i['source'])
+        data_brand = html.escape(i.get('brand', 'Unknown'))
         data_unknown = "1" if size_unknown else "0"
         data_sold_out = "1" if sold_out else "0"
         data_recency = recency_bucket(i)
@@ -312,7 +330,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         wish_price = i['price'] if i.get('price') is not None else ''
         wish_compare = i['compare_at_price'] if i.get('compare_at_price') else ''
         return f"""
-        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-recency="{data_recency}">
+        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-recency="{data_recency}">
           <button type="button" class="save-btn" data-id="{wish_id}" data-title="{wish_title}" data-url="{wish_url}" data-image="{wish_image}" data-source="{data_source}" data-price="{wish_price}" data-compare-price="{wish_compare}" aria-label="Save to wishlist">☆</button>
           <a class="card-link" href="{i['url']}" target="_blank" rel="noopener">
             <div class="thumb" {img_style}>{icon}</div>
@@ -360,6 +378,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
   </div>
   <div class="filter-bars">
     {render_recency_filter()}
+    {render_chip_bar("Filter by brand", "brand", all_brands, "All brands")}
     {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
     {render_my_sizes_toggle()}
     {render_collapsible_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
@@ -371,7 +390,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
   <script>
     {MY_SIZES_JS_HELPERS}
     (function() {{
-      var state = {{size: new Set(), source: new Set(), recency: 'all'}};
+      var state = {{size: new Set(), source: new Set(), brand: new Set(), recency: 'all'}};
       var hideSoldOut = false;
       var chips = document.querySelectorAll('.chip[data-group]');
       var cards = document.querySelectorAll('.card');
@@ -387,11 +406,12 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
             var sizeMatch = state.size.size === 0 || (noSizeInfo && !isUnknownSize) ||
               sizes.some(function(s) {{ return state.size.has(s); }});
             var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
+            var brandMatch = state.brand.size === 0 || state.brand.has(c.dataset.brand || '');
             var soldOutOk = !(hideSoldOut && c.dataset.soldOut === '1');
             var recencyMatch = state.recency === 'all' ||
               (state.recency === 'today' && c.dataset.recency === 'today') ||
               (state.recency === 'week' && c.dataset.recency !== 'older');
-            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && soldOutOk && recencyMatch));
+            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && brandMatch && soldOutOk && recencyMatch));
           }} catch (e) {{
             console.error('[filter] failed for card', c, e);
           }}
