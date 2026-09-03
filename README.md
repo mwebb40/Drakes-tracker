@@ -24,8 +24,9 @@ Pages — no server to maintain.
   getting blocked.
 
 Each run compares its results against `data/state.json` (committed back to
-the repo) so the dashboard can show what's genuinely new since the last
-run, not just everything currently listed.
+the repo), which records when each listing was first seen - not just
+whether it's been seen before - so the dashboard can show what's
+genuinely new (today, this week) rather than everything currently listed.
 
 ## Setup
 
@@ -112,17 +113,31 @@ again: each one is a fixed collection/brand page on that store's own site
 rather than a keyword search, so there's no term list to edit for them —
 see the "Adding more stockists" section below instead.
 
+## Filtering by how new something is
+
+The **"Filter by new"** chips (All / New today / New this week) at the top
+of the page filter by when an item's listing was first seen by the
+tracker, based on the per-item timestamp in `data/state.json` -
+independent of which section (New today / On sale / Everything else) it's
+displayed under, and combinable with every other filter. "New this week"
+includes today's items too (it's cumulative, not a separate 7-day band).
+An item only counts as new once - if it's been sitting in `state.json`
+since a previous run, filtering to "New today" won't surface it again just
+because you're looking at it today.
+
 ## Filtering by size
 
 Edit `TARGET_SIZES` in `config.py` with your sizes (e.g. `["M", "L", "16"]`
 for tops, collar size, whatever mix you wear). Two things happen with this:
 
 - Items in your sizes get a small "Your size" badge.
-- The dashboard itself has a **size filter bar** at the top — clickable
-  chips built from whatever sizes are in that day's results — so you can
-  narrow down to just "M" or just "16" on the page directly, no rerun
-  needed. Ties, scarves and pocket squares (no sizing) always show, since
-  there's nothing to filter on.
+- The dashboard itself has a **size filter** — clickable chips built from
+  whatever sizes are in that day's results — so you can narrow down to
+  just "M" or just "16" on the page directly, no rerun needed. Ties,
+  scarves and pocket squares (no sizing) always show, since there's
+  nothing to filter on. It's tucked behind a "Filter by size ▾" toggle
+  rather than shown by default, since the full chip list can run to 80+
+  sizes across all the sources.
 
 Note: eBay and the HTML-scraped stockists (END., Mr Porter, All Blues Co)
 can't reliably surface size from their listing summaries. Those items are

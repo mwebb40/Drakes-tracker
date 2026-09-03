@@ -10,7 +10,7 @@ from __future__ import annotations
 import html
 import json
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import config
 from sources import shopify_store, html_store, vinted, ebay
@@ -19,20 +19,36 @@ STATE_PATH = Path("data/state.json")
 DASHBOARD_PATH = Path("docs/index.html")
 
 
-def load_previous_ids() -> set[str]:
-    if STATE_PATH.exists():
-        try:
-            return set(json.loads(STATE_PATH.read_text()).get("seen_ids", []))
-        except json.JSONDecodeError:
-            return set()
-    return set()
+def load_first_seen() -> dict[str, str]:
+    """Maps item id -> ISO timestamp of when it was first seen, so the
+    dashboard can tell "seen an hour ago" from "seen five days ago" - not
+    just whether an id has ever been seen at all."""
+    if not STATE_PATH.exists():
+        return {}
+    try:
+        data = json.loads(STATE_PATH.read_text())
+    except json.JSONDecodeError:
+        return {}
+    seen = data.get("seen")
+    if isinstance(seen, dict):
+        return seen
+    # Old state format: a flat list of ids with no per-item timestamp.
+    # Best available guess for when they were first seen is this old
+    # state's own last_run - not exact, but far better than treating
+    # everything already-tracked as brand new just because the state
+    # format changed.
+    old_ids = data.get("seen_ids") or []
+    fallback_ts = data.get("last_run") or datetime.now(timezone.utc).isoformat()
+    return {i: fallback_ts for i in old_ids}
 
 
-def save_state(all_items: list[dict]) -> None:
+def save_state(all_items: list[dict], first_seen: dict[str, str]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    seen = {i["id"]: first_seen.get(i["id"], now) for i in all_items}
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps({
-        "last_run": datetime.now(timezone.utc).isoformat(),
-        "seen_ids": [i["id"] for i in all_items],
+        "last_run": now,
+        "seen": seen,
     }, indent=2))
 
 
@@ -66,14 +82,31 @@ def collect_resale_items() -> list[dict]:
     return items
 
 
-def render_chip_bar(label: str, group: str, values: list[str], all_label: str) -> str:
-    if not values:
-        return ""
+def _chip_buttons(group: str, values: list[str], all_label: str) -> str:
     chips = [f'<button class="chip active" data-group="{group}" data-value="__all__">{html.escape(all_label)}</button>']
     for v in values:
         esc = html.escape(v)
         chips.append(f'<button class="chip" data-group="{group}" data-value="{esc}">{esc}</button>')
-    return f'<div class="filters"><div class="filters-label">{html.escape(label)}</div>{"".join(chips)}</div>'
+    return "".join(chips)
+
+
+def render_chip_bar(label: str, group: str, values: list[str], all_label: str) -> str:
+    if not values:
+        return ""
+    return (f'<div class="filters"><div class="filters-label">{html.escape(label)}</div>'
+            f'{_chip_buttons(group, values, all_label)}</div>')
+
+
+def render_collapsible_chip_bar(label: str, group: str, values: list[str], all_label: str) -> str:
+    """Same as render_chip_bar, but tucked behind a native <details> toggle -
+    for chip groups (like sizes) with enough values that showing them all
+    the time would dominate the page."""
+    if not values:
+        return ""
+    return (f'<details class="filters filters-collapsible">'
+            f'<summary>{html.escape(label)}</summary>'
+            f'<div class="filters-body">{_chip_buttons(group, values, all_label)}</div>'
+            f'</details>')
 
 
 def render_sold_out_toggle(any_sold_out: bool) -> str:
@@ -83,8 +116,38 @@ def render_sold_out_toggle(any_sold_out: bool) -> str:
             '<button class="chip" id="hide-sold-out">Hide sold out</button></div>')
 
 
-def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
-    new_arrivals = [i for i in items if i["id"] not in previously_seen or i.get("is_new")]
+def render_recency_filter() -> str:
+    return (
+        '<div class="filters"><div class="filters-label">Filter by new</div>'
+        '<button class="chip active" data-recency-filter="all">All</button>'
+        '<button class="chip" data-recency-filter="today">New today</button>'
+        '<button class="chip" data-recency-filter="week">New this week</button>'
+        '</div>'
+    )
+
+
+def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
+    now = datetime.now(timezone.utc)
+
+    def recency_bucket(i: dict) -> str:
+        """"today" (seen within 24h), "week" (within 7 days) or "older" -
+        based on when an item's id was first recorded in state.json, not
+        the self-reported is_new flag some sources always set to True."""
+        ts = first_seen.get(i["id"])
+        if ts:
+            try:
+                age = now - datetime.fromisoformat(ts)
+            except ValueError:
+                age = timedelta(0)
+        else:
+            age = timedelta(0)  # never seen before - definitionally brand new
+        if age <= timedelta(hours=24):
+            return "today"
+        if age <= timedelta(days=7):
+            return "week"
+        return "older"
+
+    new_arrivals = [i for i in items if recency_bucket(i) == "today"]
     on_sale = [i for i in items if i.get("on_sale")]
     everything_else = [i for i in items if i not in new_arrivals and i not in on_sale]
 
@@ -121,8 +184,9 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
         data_source = html.escape(i['source'])
         data_unknown = "1" if size_unknown else "0"
         data_sold_out = "1" if sold_out else "0"
+        data_recency = recency_bucket(i)
         return f"""
-        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}">
+        <a class="card" href="{i['url']}" target="_blank" rel="noopener" data-sizes="{data_sizes}" data-source="{data_source}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-recency="{data_recency}">
           <div class="thumb" {img_style}>{icon}</div>
           <div class="source">{i['source']}{badge}</div>
           <div class="title">{i['title'] or 'Untitled'}</div>
@@ -195,9 +259,18 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
     background: #eae5d6; color: #5c5645; font-size: 0.58rem; letter-spacing: 0.06em;
     text-transform: uppercase; vertical-align: 1px;
   }}
+  .filter-bars {{ margin-bottom: 36px; }}
   .filters {{ text-align: center; margin-bottom: 14px; }}
-  .filters:last-of-type {{ margin-bottom: 36px; }}
+  .filters:last-child {{ margin-bottom: 0; }}
   .filters-label {{ font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85; margin-bottom: 10px; }}
+  .filters-collapsible summary {{
+    font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em; color: #a39c85;
+    cursor: pointer; list-style: none; display: inline-block; margin-bottom: 10px;
+  }}
+  .filters-collapsible summary::-webkit-details-marker {{ display: none; }}
+  .filters-collapsible summary::after {{ content: ' ▾'; }}
+  .filters-collapsible[open] summary::after {{ content: ' ▴'; }}
+  .filters-collapsible .filters-body {{ margin-top: 2px; }}
   .chip {{
     display: inline-block; padding: 5px 14px; margin: 3px; border: 1px solid #ddd6c2;
     border-radius: 999px; font-size: 0.78rem; color: #5c5645; cursor: pointer;
@@ -213,15 +286,18 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
     <div class="rule-thin"></div>
     <div class="meta">Updated {generated} · {len(items)} pieces across Vinted, eBay, Marrkt &amp; UK stockists</div>
   </div>
-  {render_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
-  {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
-  {render_sold_out_toggle(any_sold_out)}
+  <div class="filter-bars">
+    {render_recency_filter()}
+    {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
+    {render_collapsible_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
+    {render_sold_out_toggle(any_sold_out)}
+  </div>
   {section("New today", new_arrivals)}
   {section("On sale", on_sale)}
   {section("Everything else", everything_else, muted=True)}
   <script>
     (function() {{
-      var state = {{size: new Set(), source: new Set()}};
+      var state = {{size: new Set(), source: new Set(), recency: 'all'}};
       var hideSoldOut = false;
       var chips = document.querySelectorAll('.chip[data-group]');
       var cards = document.querySelectorAll('.card');
@@ -237,7 +313,10 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
               sizes.some(function(s) {{ return state.size.has(s); }});
             var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
             var soldOutOk = !(hideSoldOut && c.dataset.soldOut === '1');
-            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && soldOutOk));
+            var recencyMatch = state.recency === 'all' ||
+              (state.recency === 'today' && c.dataset.recency === 'today') ||
+              (state.recency === 'week' && c.dataset.recency !== 'older');
+            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && soldOutOk && recencyMatch));
           }} catch (e) {{
             console.error('[filter] failed for card', c, e);
           }}
@@ -251,6 +330,15 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
           apply();
         }});
       }}
+      var recencyChips = document.querySelectorAll('.chip[data-recency-filter]');
+      recencyChips.forEach(function(chip) {{
+        chip.addEventListener('click', function() {{
+          state.recency = chip.dataset.recencyFilter;
+          recencyChips.forEach(function(c) {{ c.classList.remove('active'); }});
+          chip.classList.add('active');
+          apply();
+        }});
+      }});
       chips.forEach(function(chip) {{
         chip.addEventListener('click', function() {{
           var group = chip.dataset.group;
@@ -275,16 +363,16 @@ def render_dashboard(items: list[dict], previously_seen: set[str]) -> str:
 
 
 def main() -> None:
-    previously_seen = load_previous_ids()
+    first_seen = load_first_seen()
 
     retailer_items = collect_retailer_items()
     resale_items = collect_resale_items()
     all_items = retailer_items + resale_items
 
     DASHBOARD_PATH.parent.mkdir(parents=True, exist_ok=True)
-    DASHBOARD_PATH.write_text(render_dashboard(all_items, previously_seen))
+    DASHBOARD_PATH.write_text(render_dashboard(all_items, first_seen))
 
-    save_state(all_items)
+    save_state(all_items, first_seen)
     print(f"Done. {len(all_items)} items total, dashboard written to {DASHBOARD_PATH}")
 
 
