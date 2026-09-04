@@ -202,8 +202,9 @@ brand (usually `store.com/collections/<brand>` or similar) and add:
 For non-Shopify stores, add a `platform: "html"` entry with a `search_url`
 pointing at their brand page for that brand — expect to need to tune
 `sources/html_store.py` for that specific site's markup. RRL currently
-tracks Marrkt, Stuarts London and The Sporting Lodge; add further
-stockists there the same way as you identify them.
+tracks Marrkt, Stuarts London, The Sporting Lodge, Son of a Stag and
+Yards Store; add further stockists there the same way as you identify
+them.
 
 ## Vinted reliability
 

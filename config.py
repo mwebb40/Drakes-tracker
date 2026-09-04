@@ -110,6 +110,18 @@ BRANDS = [
                 "base_url": "https://www.thesportinglodge.com",
                 "collection": "rrl-by-ralph-lauren",
             },
+            {
+                "name": "Son of a Stag",
+                "platform": "shopify",
+                "base_url": "https://sonofastag.com",
+                "collection": "rrl",
+            },
+            {
+                "name": "Yards Store",
+                "platform": "shopify",
+                "base_url": "https://www.yardsstore.com",
+                "collection": "rrl-by-ralph-lauren",
+            },
             # Add more stockists here as you identify them.
         ],
         "vinted": {
