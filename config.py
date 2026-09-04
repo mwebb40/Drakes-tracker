@@ -98,6 +98,18 @@ BRANDS = [
                 "base_url": "https://www.marrkt.com",
                 "collection": "rrl",
             },
+            {
+                "name": "Stuarts London",
+                "platform": "shopify",
+                "base_url": "https://www.stuartslondon.com",
+                "collection": "rrl-by-ralph-lauren",
+            },
+            {
+                "name": "The Sporting Lodge",
+                "platform": "shopify",
+                "base_url": "https://www.thesportinglodge.com",
+                "collection": "rrl-by-ralph-lauren",
+            },
             # Add more stockists here as you identify them.
         ],
         "vinted": {
