@@ -4,8 +4,9 @@ An hourly-refreshing dashboard tracking new listings across multiple
 brands (currently Drake's and RRL — edit `config.py`'s `BRANDS` list to
 add more) on **Vinted** and **eBay**, plus new arrivals and sale
 price-drops on each brand's own retail stockists where configured (right
-now that's Drake's own site, Marrkt, House of Huntington, END., Mr Porter
-and All Blues Co).
+now that's Drake's own site, Marrkt, House of Huntington, END., Mr Porter,
+All Blues Co and Son of a Stag for Drake's; Marrkt, Stuarts London, The
+Sporting Lodge, Son of a Stag and Yards Store for RRL).
 
 It runs for free on GitHub Actions and publishes a static page via GitHub
 Pages — no server to maintain.

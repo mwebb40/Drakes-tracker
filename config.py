@@ -75,6 +75,12 @@ BRANDS = [
                 "platform": "html",
                 "search_url": "https://allbluescostore.com/product-tag/drakes-menswear-and-accessories/",
             },
+            {
+                "name": "Son of a Stag",
+                "platform": "shopify",
+                "base_url": "https://sonofastag.com",
+                "collection": "drakes",
+            },
             # Add more UK stockists here, e.g. Trunk Clothiers, Oi Polloi, The Bureau Belfast:
             # {"name": "Trunk Clothiers", "platform": "html", "search_url": "https://www.trunkclothiers.com/..."},
         ],
