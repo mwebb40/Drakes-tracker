@@ -243,6 +243,13 @@ def render_sold_out_toggle(any_sold_out: bool) -> str:
             '<button class="chip" id="hide-sold-out">Hide sold out</button></div>')
 
 
+def render_on_sale_toggle(any_on_sale: bool) -> str:
+    if not any_on_sale:
+        return ""
+    return ('<div class="filters"><div class="filters-label">Price</div>'
+            '<button class="chip" id="show-on-sale">On sale only</button></div>')
+
+
 def render_recency_filter() -> str:
     return (
         '<div class="filters"><div class="filters-label">Filter by new</div>'
@@ -291,6 +298,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     all_sources = sorted({i["source"] for i in items})
     all_brands = sorted({i.get("brand", "Unknown") for i in items})
     any_sold_out = any(i.get("sold_out") is True for i in items)
+    any_on_sale = any(i.get("on_sale") is True for i in items)
 
     def card(i: dict) -> str:
         price_html = ""
@@ -322,6 +330,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         data_brand = html.escape(i.get('brand', 'Unknown'))
         data_unknown = "1" if size_unknown else "0"
         data_sold_out = "1" if sold_out else "0"
+        data_on_sale = "1" if i.get("on_sale") is True else "0"
         data_recency = recency_bucket(i)
         wish_id = html.escape(i['id'])
         wish_title = html.escape(i['title'] or 'Untitled')
@@ -330,7 +339,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         wish_price = i['price'] if i.get('price') is not None else ''
         wish_compare = i['compare_at_price'] if i.get('compare_at_price') else ''
         return f"""
-        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-recency="{data_recency}">
+        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-on-sale="{data_on_sale}" data-recency="{data_recency}">
           <button type="button" class="save-btn" data-id="{wish_id}" data-title="{wish_title}" data-url="{wish_url}" data-image="{wish_image}" data-source="{data_source}" data-price="{wish_price}" data-compare-price="{wish_compare}" aria-label="Save to wishlist">☆</button>
           <a class="card-link" href="{i['url']}" target="_blank" rel="noopener">
             <div class="thumb" {img_style}>{icon}</div>
@@ -383,6 +392,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     {render_my_sizes_toggle()}
     {render_collapsible_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
     {render_sold_out_toggle(any_sold_out)}
+    {render_on_sale_toggle(any_on_sale)}
   </div>
   {section("New today", new_arrivals)}
   {section("On sale", on_sale)}
@@ -392,6 +402,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     (function() {{
       var state = {{size: new Set(), source: new Set(), brand: new Set(), recency: 'all'}};
       var hideSoldOut = false;
+      var showOnSaleOnly = false;
       var chips = document.querySelectorAll('.chip[data-group]');
       var cards = document.querySelectorAll('.card');
       var FALLBACK_TARGET_SIZES = {target_sizes_json};
@@ -408,10 +419,11 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
             var sourceMatch = state.source.size === 0 || state.source.has(c.dataset.source || '');
             var brandMatch = state.brand.size === 0 || state.brand.has(c.dataset.brand || '');
             var soldOutOk = !(hideSoldOut && c.dataset.soldOut === '1');
+            var onSaleOk = !showOnSaleOnly || c.dataset.onSale === '1';
             var recencyMatch = state.recency === 'all' ||
               (state.recency === 'today' && c.dataset.recency === 'today') ||
               (state.recency === 'week' && c.dataset.recency !== 'older');
-            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && brandMatch && soldOutOk && recencyMatch));
+            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && brandMatch && soldOutOk && onSaleOk && recencyMatch));
           }} catch (e) {{
             console.error('[filter] failed for card', c, e);
           }}
@@ -422,6 +434,14 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         soldOutToggle.addEventListener('click', function() {{
           hideSoldOut = !hideSoldOut;
           soldOutToggle.classList.toggle('active', hideSoldOut);
+          apply();
+        }});
+      }}
+      var onSaleToggle = document.getElementById('show-on-sale');
+      if (onSaleToggle) {{
+        onSaleToggle.addEventListener('click', function() {{
+          showOnSaleOnly = !showOnSaleOnly;
+          onSaleToggle.classList.toggle('active', showOnSaleOnly);
           apply();
         }});
       }}

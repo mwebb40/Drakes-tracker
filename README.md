@@ -179,6 +179,17 @@ listings. Only Shopify stores can tell us stock status for certain, so the
 toggle only ever hides items it's actually sure are sold out — Vinted,
 eBay and the HTML-scraped stockists are unaffected by it either way.
 
+## Filtering to items on sale
+
+Whenever a run turns up at least one Shopify product whose price is below
+its listed "compare at" price, an **"On sale only"** toggle appears next
+to the sold-out one, filtering the whole page (independent of section) down
+to just those price drops. Same caveat as sold-out detection: only Shopify
+stores can tell us this for certain, so Vinted, eBay and the HTML-scraped
+stockists never show as "on sale" even if a seller has genuinely dropped
+their price — the toggle only hides items it's not sure about, never
+wrongly includes them.
+
 ## Wishlist
 
 Every card has a "☆ Save" button, and a **"☆ My wishlist"** link in the
