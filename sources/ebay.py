@@ -41,6 +41,66 @@ _PRICE_RE = re.compile(r"[\d,]+\.\d{2}|\d+")
 _CURRENCY_PRICE_RE = re.compile(r"[£$€]\s?\d{1,4}(?:,\d{3})*(?:\.\d{2})?")
 _ITEM_ID_RE = re.compile(r"/itm/(?:[^/]+/)?(\d+)")
 
+# Standard clothing letter sizes, always looked for in a title regardless of
+# your own TARGET_SIZES - sellers routinely put these in the title itself
+# ("Drake's Wool Tie M") even though eBay's search results don't expose a
+# proper "item specifics" size field the way a listing's own page does.
+_LETTER_SIZES = ["XXXL", "XXL", "XS", "XL", "S", "M", "L"]
+
+# Sellers just as often spell a size out instead of abbreviating it
+# ("...Brown Medium" rather than "...Brown M") - mapped to the same letter
+# codes so a spelled-out size still matches a letter-based TARGET_SIZES entry.
+_WORD_SIZE_MAP = {
+    "extra small": "XS",
+    "small": "S",
+    "medium": "M",
+    "large": "L",
+    "extra large": "XL",
+    "extra extra large": "XXL",
+}
+
+
+def _extract_sizes(title: str, target_sizes: list[str] | None) -> list[str]:
+    """Best-effort size extraction from listing titles - the same kind of
+    heuristic html_store.py already relies on for JS-heavy retailer sites,
+    since eBay's search results (unlike a listing's own page) don't carry a
+    structured size field. Checks a fixed vocabulary of letter sizes (as
+    both abbreviations and spelled-out words) plus whatever sizes you've
+    configured (TARGET_SIZES), so e.g. a collar size like "16" or a shoe
+    size only gets matched if it's one you actually asked to track - not
+    any bare number in the title (a price fragment, a model year, a
+    listing count)."""
+    if not title:
+        return []
+    found = []
+
+    # Word-based matches first, longest phrase first, masking each match out
+    # of the working copy as it's found - otherwise "large" (itself a valid
+    # standalone match) fires from inside "extra large" before the longer
+    # phrase gets a chance, wrongly adding both L and XL for one item.
+    working = title
+    for phrase, letter in sorted(_WORD_SIZE_MAP.items(), key=lambda kv: len(kv[0]), reverse=True):
+        match = re.search(rf"\b{re.escape(phrase)}\b", working, re.IGNORECASE)
+        if not match:
+            continue
+        if letter not in found:
+            found.append(letter)
+        working = working[:match.start()] + "#" * (match.end() - match.start()) + working[match.end():]
+
+    vocab = sorted(set(_LETTER_SIZES) | set(target_sizes or []), key=len, reverse=True)
+    for token in vocab:
+        if token in found:
+            continue
+        # Excluding apostrophes from the boundary matters a lot here -
+        # without it, the "s" in a plain possessive like "Drake's" or
+        # "Men's" (nearly every title in this project) reads as a
+        # standalone size "S".
+        pattern = re.compile(rf"(?<![A-Za-z0-9'’]){re.escape(token)}(?![A-Za-z0-9'’])", re.IGNORECASE)
+        if pattern.search(working):
+            found.append(token)
+
+    return found
+
 
 def _parse_price(text: str) -> float | None:
     if not text:
@@ -83,7 +143,14 @@ def _find_image_near(anchor) -> str | None:
 
 
 def _make_item(url: str, item_id: str, title: str, price: float | None,
-               image: str | None, keywords: str) -> dict:
+               image: str | None, keywords: str, target_sizes: list[str] | None) -> dict:
+    sizes = _extract_sizes(title, target_sizes)
+    # No size found in the title is genuinely ambiguous - could be a
+    # one-size item (a tie, a scarf) or just a seller who left it out of
+    # the title - so it stays "unknown" (bypasses the size filter) rather
+    # than being treated as a confident non-match, same convention as
+    # sources/vinted.py.
+    size_match = None if not sizes else any(s in (target_sizes or []) for s in sizes)
     return {
         "source": "eBay",
         "type": "resale",
@@ -93,11 +160,8 @@ def _make_item(url: str, item_id: str, title: str, price: float | None,
         "compare_at_price": None,
         "on_sale": None,
         "is_new": True,  # sorted newly-listed first - first_seen tracking still governs actual recency
-        # eBay's search results don't reliably expose size (it's buried in
-        # per-item "item specifics", a separate page per listing) -
-        # unknown sizes always show rather than being filtered out.
-        "sizes": [],
-        "size_match": None,
+        "sizes": sizes,
+        "size_match": size_match,
         "image": image,
         "id": f"ebay:{item_id}",
         "matched_term": keywords,
@@ -105,7 +169,7 @@ def _make_item(url: str, item_id: str, title: str, price: float | None,
     }
 
 
-def _from_item_cards(soup: BeautifulSoup, keywords: str) -> list[dict]:
+def _from_item_cards(soup: BeautifulSoup, keywords: str, target_sizes: list[str] | None) -> list[dict]:
     """The classic eBay search result markup (li.s-item, with a fixed set of
     sub-classes for title/price/image). Cheap to check first when it applies,
     but eBay has multiple result-grid layouts in rotation and this one won't
@@ -130,11 +194,11 @@ def _from_item_cards(soup: BeautifulSoup, keywords: str) -> list[dict]:
         price_el = card.select_one(".s-item__price")
         price = _parse_price(price_el.get_text(strip=True)) if price_el else None
 
-        items.append(_make_item(url, item_id, title, price, image, keywords))
+        items.append(_make_item(url, item_id, title, price, image, keywords, target_sizes))
     return items
 
 
-def _from_item_links(soup: BeautifulSoup, keywords: str) -> list[dict]:
+def _from_item_links(soup: BeautifulSoup, keywords: str, target_sizes: list[str] | None) -> list[dict]:
     """Generic fallback, same technique html_store.py uses for JS-heavy
     retailer sites: find every link that actually points at a listing
     (/itm/<id>) regardless of whatever CSS classes eBay's current experiment
@@ -163,12 +227,12 @@ def _from_item_links(soup: BeautifulSoup, keywords: str) -> list[dict]:
         price = _find_price_near(a)
         image = _find_image_near(a)
 
-        items.append(_make_item(url, item_id, title, price, image, keywords))
+        items.append(_make_item(url, item_id, title, price, image, keywords, target_sizes))
     return items
 
 
 def _search_one(session: requests.Session, domain: str, keywords: str,
-                 category_id: str | None, limit: int) -> list[dict]:
+                 category_id: str | None, limit: int, target_sizes: list[str] | None) -> list[dict]:
     params = {
         "_nkw": keywords,
         "_sop": "10",  # newly listed first
@@ -184,9 +248,9 @@ def _search_one(session: requests.Session, domain: str, keywords: str,
     resp.raise_for_status()
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    items = _from_item_cards(soup, keywords)
+    items = _from_item_cards(soup, keywords, target_sizes)
     if not items:
-        items = _from_item_links(soup, keywords)
+        items = _from_item_links(soup, keywords, target_sizes)
     if not items:
         # Neither strategy found anything on a 200 response - probably an
         # anti-bot interstitial rather than real results. Logging the page
@@ -198,10 +262,12 @@ def _search_one(session: requests.Session, domain: str, keywords: str,
 
 
 def fetch(keywords: list[str] | str, site: str, category_id: str | None = None,
-          limit: int = 60) -> list[dict]:
+          target_sizes: list[str] | None = None, limit: int = 60) -> list[dict]:
     """keywords can be a single string or a list - each term gets its own
     search, results are merged and deduplicated by eBay item ID (an item can
-    legitimately match more than one of your terms)."""
+    legitimately match more than one of your terms). target_sizes (e.g.
+    config.TARGET_SIZES) is checked against each listing's title alongside a
+    fixed set of standard letter sizes - see _extract_sizes()."""
     if isinstance(keywords, str):
         keywords = [keywords]
 
@@ -225,7 +291,7 @@ def fetch(keywords: list[str] | str, site: str, category_id: str | None = None,
     items = []
     for term in keywords:
         try:
-            batch = _search_one(session, domain, term, category_id, limit)
+            batch = _search_one(session, domain, term, category_id, limit, target_sizes)
         except requests.RequestException as e:
             print(f"[ebay] search '{term}' failed ({e})")
             continue

@@ -201,6 +201,7 @@ def collect_resale_items() -> list[dict]:
         if ebay_cfg.get("enabled"):
             batch = ebay.fetch(
                 ebay_cfg["search_terms"], config.EBAY_SITE, ebay_cfg.get("category_id"),
+                target_sizes=config.TARGET_SIZES,
             )
             for item in batch:
                 item["brand"] = brand["name"]
