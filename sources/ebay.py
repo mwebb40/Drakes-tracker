@@ -41,6 +41,20 @@ _PRICE_RE = re.compile(r"[\d,]+\.\d{2}|\d+")
 _CURRENCY_PRICE_RE = re.compile(r"[£$€]\s?\d{1,4}(?:,\d{3})*(?:\.\d{2})?")
 _ITEM_ID_RE = re.compile(r"/itm/(?:[^/]+/)?(\d+)")
 
+# eBay's own image CDN size convention, visible in any image URL on their
+# site (".../s-l140.jpg", ".../s-l500.jpg", etc - "s-l<pixels>"). Search
+# results embed a small thumbnail (usually s-l140, sometimes smaller) by
+# default even though the same file is served at much larger sizes on the
+# listing's own page - swapping the size segment still resolves since it's
+# the same underlying image, just a different pre-rendered size.
+_EBAY_IMAGE_SIZE_RE = re.compile(r"/s-l\d+(?=\.(?:jpg|jpeg|png|webp)(?:[?#]|$))", re.IGNORECASE)
+
+
+def _upgrade_image(url: str | None) -> str | None:
+    if not url:
+        return url
+    return _EBAY_IMAGE_SIZE_RE.sub("/s-l500", url)
+
 # Standard clothing letter sizes, always looked for in a title regardless of
 # your own TARGET_SIZES - sellers routinely put these in the title itself
 # ("Drake's Wool Tie M") even though eBay's search results don't expose a
@@ -162,7 +176,7 @@ def _make_item(url: str, item_id: str, title: str, price: float | None,
         "is_new": True,  # sorted newly-listed first - first_seen tracking still governs actual recency
         "sizes": sizes,
         "size_match": size_match,
-        "image": image,
+        "image": _upgrade_image(image),
         "id": f"ebay:{item_id}",
         "matched_term": keywords,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
