@@ -254,6 +254,11 @@ def render_price_filters(any_on_sale: bool, any_under_100: bool) -> str:
     return f'<div class="filters"><div class="filters-label">Price</div>{buttons}</div>'
 
 
+def render_sort_toggle() -> str:
+    return ('<div class="filters"><div class="filters-label">Sort by</div>'
+            '<button type="button" class="chip" id="sort-newest">Newest added first</button></div>')
+
+
 def render_recency_filter() -> str:
     return (
         '<div class="filters"><div class="filters-label">Filter by new</div>'
@@ -281,18 +286,23 @@ def render_my_sizes_toggle(any_unknown_size: bool) -> str:
 def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     now = datetime.now(timezone.utc)
 
+    def first_seen_dt(i: dict) -> datetime:
+        """When an item's id was first recorded in state.json, or now if
+        it's never been seen before (definitionally brand new) or the
+        timestamp is malformed."""
+        ts = first_seen.get(i["id"])
+        if ts:
+            try:
+                return datetime.fromisoformat(ts)
+            except ValueError:
+                pass
+        return now
+
     def recency_bucket(i: dict) -> str:
         """"today" (seen within 24h), "week" (within 7 days) or "older" -
         based on when an item's id was first recorded in state.json, not
         the self-reported is_new flag some sources always set to True."""
-        ts = first_seen.get(i["id"])
-        if ts:
-            try:
-                age = now - datetime.fromisoformat(ts)
-            except ValueError:
-                age = timedelta(0)
-        else:
-            age = timedelta(0)  # never seen before - definitionally brand new
+        age = now - first_seen_dt(i)
         if age <= timedelta(hours=24):
             return "today"
         if age <= timedelta(days=7):
@@ -343,6 +353,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         data_sold_out = "1" if sold_out else "0"
         data_on_sale = "1" if i.get("on_sale") is True else "0"
         data_recency = recency_bucket(i)
+        data_first_seen = int(first_seen_dt(i).timestamp() * 1000)
         data_price = i["price"] if i.get("price") is not None else ""
         wish_id = html.escape(i['id'])
         wish_title = html.escape(i['title'] or 'Untitled')
@@ -351,7 +362,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         wish_price = i['price'] if i.get('price') is not None else ''
         wish_compare = i['compare_at_price'] if i.get('compare_at_price') else ''
         return f"""
-        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-on-sale="{data_on_sale}" data-recency="{data_recency}" data-price="{data_price}">
+        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-on-sale="{data_on_sale}" data-recency="{data_recency}" data-price="{data_price}" data-first-seen="{data_first_seen}">
           <button type="button" class="save-btn" data-id="{wish_id}" data-title="{wish_title}" data-url="{wish_url}" data-image="{wish_image}" data-source="{data_source}" data-price="{wish_price}" data-compare-price="{wish_compare}" aria-label="Save to wishlist">☆</button>
           <a class="card-link" href="{i['url']}" target="_blank" rel="noopener">
             <div class="thumb" {img_style}>{icon}</div>
@@ -398,6 +409,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     </div>
   </div>
   <div class="filter-bars">
+    {render_sort_toggle()}
     {render_recency_filter()}
     {render_chip_bar("Filter by brand", "brand", all_brands, "All brands")}
     {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
@@ -443,6 +455,29 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
           }} catch (e) {{
             console.error('[filter] failed for card', c, e);
           }}
+        }});
+      }}
+      var grids = document.querySelectorAll('.grid');
+      var originalOrder = new Map();
+      grids.forEach(function(g) {{ originalOrder.set(g, Array.from(g.children)); }});
+      var sortNewestFirst = false;
+      function applySort() {{
+        grids.forEach(function(g) {{
+          var order = originalOrder.get(g).slice();
+          if (sortNewestFirst) {{
+            order.sort(function(a, b) {{
+              return parseFloat(b.dataset.firstSeen || 0) - parseFloat(a.dataset.firstSeen || 0);
+            }});
+          }}
+          order.forEach(function(c) {{ g.appendChild(c); }});
+        }});
+      }}
+      var sortToggle = document.getElementById('sort-newest');
+      if (sortToggle) {{
+        sortToggle.addEventListener('click', function() {{
+          sortNewestFirst = !sortNewestFirst;
+          sortToggle.classList.toggle('active', sortNewestFirst);
+          applySort();
         }});
       }}
       var soldOutToggle = document.getElementById('hide-sold-out');

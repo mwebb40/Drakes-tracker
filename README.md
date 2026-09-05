@@ -175,6 +175,17 @@ filtering behaviour as picking those sizes by hand in the size filter.
 Before you've visited "My sizes" for the first time, the toggle falls back
 to whatever's in `TARGET_SIZES`.
 
+## Sorting by newest added
+
+A **"Newest added first"** toggle sits above the other filters and reorders
+each section's cards (New today, On sale, Everything else - it never moves
+items between sections) so the most recently first-seen items in that
+section show up first. It uses the same `data/state.json` first-seen
+timestamp as the recency filter, just at full precision instead of
+today/this week/older buckets, so it's independent of every other filter
+and can be combined with any of them. Toggling it off restores each
+section's original order.
+
 ## Filtering out sold-out items
 
 Whenever a run turns up at least one Shopify product with zero available
