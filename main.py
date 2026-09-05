@@ -243,11 +243,15 @@ def render_sold_out_toggle(any_sold_out: bool) -> str:
             '<button class="chip" id="hide-sold-out">Hide sold out</button></div>')
 
 
-def render_on_sale_toggle(any_on_sale: bool) -> str:
-    if not any_on_sale:
+def render_price_filters(any_on_sale: bool, any_under_100: bool) -> str:
+    if not any_on_sale and not any_under_100:
         return ""
-    return ('<div class="filters"><div class="filters-label">Price</div>'
-            '<button class="chip" id="show-on-sale">On sale only</button></div>')
+    buttons = ""
+    if any_on_sale:
+        buttons += '<button class="chip" id="show-on-sale">On sale only</button>'
+    if any_under_100:
+        buttons += '<button class="chip" id="under-100">Under £100</button>'
+    return f'<div class="filters"><div class="filters-label">Price</div>{buttons}</div>'
 
 
 def render_recency_filter() -> str:
@@ -260,10 +264,15 @@ def render_recency_filter() -> str:
     )
 
 
-def render_my_sizes_toggle() -> str:
+def render_my_sizes_toggle(any_unknown_size: bool) -> str:
+    unknown_button = (
+        '<button type="button" class="chip" id="unknown-size-toggle">Unknown sizes only</button>'
+        if any_unknown_size else ""
+    )
     return (
         '<div class="filters"><div class="filters-label">Your sizes</div>'
         '<button type="button" class="chip" id="my-sizes-toggle">My sizes only</button>'
+        f'{unknown_button}'
         '<a class="nav-link" href="my-sizes.html" style="font-size:0.72rem; margin-left:8px;">edit list</a>'
         '</div>'
     )
@@ -299,6 +308,8 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     all_brands = sorted({i.get("brand", "Unknown") for i in items})
     any_sold_out = any(i.get("sold_out") is True for i in items)
     any_on_sale = any(i.get("on_sale") is True for i in items)
+    any_unknown_size = any(not (i.get("sizes") or []) and i.get("size_match") is None for i in items)
+    any_under_100 = any(i.get("price") is not None and i["price"] < 100 for i in items)
 
     def card(i: dict) -> str:
         price_html = ""
@@ -332,6 +343,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         data_sold_out = "1" if sold_out else "0"
         data_on_sale = "1" if i.get("on_sale") is True else "0"
         data_recency = recency_bucket(i)
+        data_price = i["price"] if i.get("price") is not None else ""
         wish_id = html.escape(i['id'])
         wish_title = html.escape(i['title'] or 'Untitled')
         wish_url = html.escape(i['url'])
@@ -339,7 +351,7 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         wish_price = i['price'] if i.get('price') is not None else ''
         wish_compare = i['compare_at_price'] if i.get('compare_at_price') else ''
         return f"""
-        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-on-sale="{data_on_sale}" data-recency="{data_recency}">
+        <div class="card" data-sizes="{data_sizes}" data-source="{data_source}" data-brand="{data_brand}" data-unknown="{data_unknown}" data-sold-out="{data_sold_out}" data-on-sale="{data_on_sale}" data-recency="{data_recency}" data-price="{data_price}">
           <button type="button" class="save-btn" data-id="{wish_id}" data-title="{wish_title}" data-url="{wish_url}" data-image="{wish_image}" data-source="{data_source}" data-price="{wish_price}" data-compare-price="{wish_compare}" aria-label="Save to wishlist">☆</button>
           <a class="card-link" href="{i['url']}" target="_blank" rel="noopener">
             <div class="thumb" {img_style}>{icon}</div>
@@ -389,10 +401,10 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     {render_recency_filter()}
     {render_chip_bar("Filter by brand", "brand", all_brands, "All brands")}
     {render_chip_bar("Filter by source", "source", all_sources, "All sources")}
-    {render_my_sizes_toggle()}
+    {render_my_sizes_toggle(any_unknown_size)}
     {render_collapsible_chip_bar("Filter by size", "size", all_sizes, "All sizes")}
     {render_sold_out_toggle(any_sold_out)}
-    {render_on_sale_toggle(any_on_sale)}
+    {render_price_filters(any_on_sale, any_under_100)}
   </div>
   {section("New today", new_arrivals)}
   {section("On sale", on_sale)}
@@ -403,6 +415,8 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
       var state = {{size: new Set(), source: new Set(), brand: new Set(), recency: 'all'}};
       var hideSoldOut = false;
       var showOnSaleOnly = false;
+      var showUnknownSizeOnly = false;
+      var underHundredOnly = false;
       var chips = document.querySelectorAll('.chip[data-group]');
       var cards = document.querySelectorAll('.card');
       var FALLBACK_TARGET_SIZES = {target_sizes_json};
@@ -420,10 +434,12 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
             var brandMatch = state.brand.size === 0 || state.brand.has(c.dataset.brand || '');
             var soldOutOk = !(hideSoldOut && c.dataset.soldOut === '1');
             var onSaleOk = !showOnSaleOnly || c.dataset.onSale === '1';
+            var unknownSizeOk = !showUnknownSizeOnly || isUnknownSize;
+            var priceOk = !underHundredOnly || (c.dataset.price !== '' && parseFloat(c.dataset.price) < 100);
             var recencyMatch = state.recency === 'all' ||
               (state.recency === 'today' && c.dataset.recency === 'today') ||
               (state.recency === 'week' && c.dataset.recency !== 'older');
-            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && brandMatch && soldOutOk && onSaleOk && recencyMatch));
+            c.classList.toggle('hidden', !(sizeMatch && sourceMatch && brandMatch && soldOutOk && onSaleOk && unknownSizeOk && priceOk && recencyMatch));
           }} catch (e) {{
             console.error('[filter] failed for card', c, e);
           }}
@@ -442,6 +458,22 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
         onSaleToggle.addEventListener('click', function() {{
           showOnSaleOnly = !showOnSaleOnly;
           onSaleToggle.classList.toggle('active', showOnSaleOnly);
+          apply();
+        }});
+      }}
+      var underHundredToggle = document.getElementById('under-100');
+      if (underHundredToggle) {{
+        underHundredToggle.addEventListener('click', function() {{
+          underHundredOnly = !underHundredOnly;
+          underHundredToggle.classList.toggle('active', underHundredOnly);
+          apply();
+        }});
+      }}
+      var unknownSizeToggle = document.getElementById('unknown-size-toggle');
+      if (unknownSizeToggle) {{
+        unknownSizeToggle.addEventListener('click', function() {{
+          showUnknownSizeOnly = !showUnknownSizeOnly;
+          unknownSizeToggle.classList.toggle('active', showUnknownSizeOnly);
           apply();
         }});
       }}

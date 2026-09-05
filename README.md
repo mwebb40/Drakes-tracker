@@ -159,6 +159,11 @@ A Shopify product that's sold out in every size (common on House of
 Huntington's past-season stock) is marked "Sold out" instead — same
 filtering behaviour, just a more specific reason.
 
+Whenever a run turns up at least one "Size unknown" item, an **"Unknown
+sizes only"** toggle appears next to "My sizes only", filtering the whole
+page down to just those - handy for working through the ones size filtering
+normally hides, without switching off every other filter to find them.
+
 `TARGET_SIZES` only takes effect on the next run and needs a code change,
 though — for something adjustable without touching `config.py`, there's
 also **"My sizes"** (linked from the header): a page listing every size
@@ -188,6 +193,13 @@ stores can tell us this for certain, so Vinted, eBay and the HTML-scraped
 stockists never show as "on sale" even if a seller has genuinely dropped
 their price — the toggle only hides items it's not sure about, never
 wrongly includes them.
+
+Alongside it, whenever a run turns up at least one item priced under £100,
+an **"Under £100"** toggle filters the page down to just those - works
+across every source (Vinted, eBay, retailer sites) since it only needs a
+known price, not sale-status detection. Items with no price at all (rare,
+but possible from a fragile HTML scrape) are excluded while this toggle is
+on, since there's nothing to compare against £100.
 
 ## Wishlist
 
