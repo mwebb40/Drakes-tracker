@@ -9,12 +9,9 @@ Shopify-based retailers or for Vinted/eBay coverage.
 # proper diff to work from (first run, or a store without stable dates).
 LOOKBACK_DAYS = 2
 
-# Shared across all brands: Vinted has one search domain, and one eBay
-# developer app covers searches for every brand.
+# Shared across all brands: one search domain each for Vinted and eBay.
 VINTED_DOMAIN = "vinted.co.uk"
-EBAY_SITE = "EBAY-GB"
-EBAY_CLIENT_ID_ENV = "EBAY_CLIENT_ID"
-EBAY_CLIENT_SECRET_ENV = "EBAY_CLIENT_SECRET"
+EBAY_SITE = "EBAY-GB"  # see sources/ebay.py's SITE_DOMAINS for other options
 
 # ---------------------------------------------------------------------------
 # BRANDS

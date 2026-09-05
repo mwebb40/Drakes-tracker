@@ -34,9 +34,6 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run tracker
-        env:
-          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
-          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
         run: python main.py
 
       - name: Commit updated dashboard + state

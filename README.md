@@ -19,8 +19,12 @@ Pages — no server to maintain.
 - **Retailers not on Shopify** (END., Mr Porter, All Blues Co): best-effort
   HTML scrape. These will need occasional fixing when the sites redesign —
   see "Extending / fixing scrapers" below.
-- **eBay**: official Browse API. Needs your own free developer credentials
-  (5 minutes to set up, see below).
+- **eBay**: no API, no account needed. Scrapes eBay's own public search
+  results page (`sources/ebay.py`) — plain server-rendered HTML, not a JS
+  app, so this is reliable in the same way the Shopify feeds are. (An
+  earlier version used eBay's official Browse API, but that requires
+  developer program approval, which isn't guaranteed — this avoids that
+  gate entirely.)
 - **Vinted**: no official API exists. This uses Vinted's own internal
   search endpoint, which sits behind Datadome anti-bot protection — see
   the "Vinted reliability" section below for what to do if it starts
@@ -38,14 +42,9 @@ genuinely new (today, this week) rather than everything currently listed.
    branch" → Branch: `main` → folder: `/docs`. Your dashboard will be live
    at `https://<you>.github.io/<repo>/` within a minute or two of the first
    run.
-3. **eBay API credentials** (free):
-   - Sign up at https://developer.ebay.com → "Get an App ID"
-   - Create a Production keyset — you'll get a **Client ID** and **Client
-     Secret**.
-   - In your GitHub repo: Settings → Secrets and variables → Actions → New
-     repository secret. Add `EBAY_CLIENT_ID` and `EBAY_CLIENT_SECRET`.
-4. That's it — the workflow in `.github/workflows/daily.yml` runs once an
-   hour, at :13 past (deliberately not on the exact hour - GitHub's own
+3. That's it — no credentials needed for eBay or Vinted. The workflow in
+   `.github/workflows/daily.yml` runs once an hour, at :13 past
+   (deliberately not on the exact hour - GitHub's own
    scheduler is most likely to delay or silently skip runs set for the top
    of the hour, since that's when every other repo's hourly cron also
    fires). You can also trigger a run manually from the repo's **Actions**
@@ -57,8 +56,6 @@ genuinely new (today, this week) rather than everything currently listed.
 
 ```bash
 pip install -r requirements.txt
-export EBAY_CLIENT_ID=xxx
-export EBAY_CLIENT_SECRET=xxx
 python main.py
 open docs/index.html   # or just double-click it
 ```
@@ -240,5 +237,6 @@ Vinted results:
   tell "new" from "not new" or extract price on first pass — treat those
   sections as a starting point to refine, not turnkey.
 - This is unofficial use of Vinted's internal API and lightweight scraping
-  of retailer HTML — reasonable for a personal low-frequency tracker, but
-  worth knowing it sits outside what these sites formally support.
+  of retailer and eBay HTML — reasonable for a personal low-frequency
+  tracker, but worth knowing it sits outside what these sites formally
+  support.

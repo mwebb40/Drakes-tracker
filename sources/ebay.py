@@ -1,110 +1,116 @@
 """
-eBay Browse API (official, legitimate, free tier). Requires your own
-credentials from https://developer.ebay.com — see README for the 5-minute
-signup. This uses the client_credentials OAuth flow (no user login needed,
-just an App ID + Cert ID).
+eBay's official Browse API requires developer program approval, which isn't
+guaranteed (rejections happen with no route to appeal). This instead scrapes
+eBay's own public search results page - no account, no API key, same
+lightweight-HTML approach already used for non-Shopify retailers in
+html_store.py. It's unofficial and the page markup can change without
+notice, but eBay's search results are plain server-rendered HTML (not a
+JS app), so a plain requests+BeautifulSoup fetch reliably sees real results,
+unlike the JS-heavy retailer sites html_store.py has to guess at.
 """
 from __future__ import annotations
-import os
-import base64
+import re
 import requests
 from datetime import datetime, timezone
+from bs4 import BeautifulSoup
 
-TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token"
-SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search"
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DrakesTracker/1.0)"}
+
+# Maps the eBay "marketplace ID" style site codes already used elsewhere in
+# this project's config (config.EBAY_SITE) to eBay's own search domain.
+SITE_DOMAINS = {
+    "EBAY-GB": "www.ebay.co.uk",
+    "EBAY-US": "www.ebay.com",
+    "EBAY-DE": "www.ebay.de",
+    "EBAY-AU": "www.ebay.com.au",
+}
+
+_PRICE_RE = re.compile(r"[\d,]+\.\d{2}|\d+")
+_ITEM_ID_RE = re.compile(r"/itm/(?:[^/]+/)?(\d+)")
 
 
-def _get_token(client_id: str, client_secret: str) -> str | None:
-    creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    resp = requests.post(
-        TOKEN_URL,
-        headers={
-            "Authorization": f"Basic {creds}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        data={
-            "grant_type": "client_credentials",
-            "scope": "https://api.ebay.com/oauth/api_scope",
-        },
-        timeout=20,
-    )
-    if resp.status_code != 200:
-        print(f"[ebay] token request failed: {resp.status_code} {resp.text[:200]}")
+def _parse_price(text: str) -> float | None:
+    if not text:
         return None
-    return resp.json().get("access_token")
+    match = _PRICE_RE.search(text.replace(",", ""))
+    return float(match.group()) if match else None
 
 
-def _search_one(keywords: str, site: str, category_id: str | None, token: str, limit: int) -> list[dict]:
-    params = {
-        "q": keywords,
-        "sort": "newlyListed",
-        "limit": limit,
-    }
+def _search_one(domain: str, keywords: str, category_id: str | None, limit: int) -> list[dict]:
+    params = {"_nkw": keywords, "_sop": "10"}  # _sop=10: newly listed first
     if category_id:
-        params["category_ids"] = category_id
+        params["_sacat"] = category_id
 
-    resp = requests.get(
-        SEARCH_URL,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "X-EBAY-C-MARKETPLACE-ID": site,
-        },
-        params=params,
-        timeout=20,
-    )
-    if resp.status_code != 200:
-        print(f"[ebay] search '{keywords}' failed: {resp.status_code} {resp.text[:200]}")
+    try:
+        resp = requests.get(f"https://{domain}/sch/i.html", params=params,
+                             headers=HEADERS, timeout=20)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[ebay] search '{keywords}' failed ({e})")
         return []
 
-    data = resp.json()
+    soup = BeautifulSoup(resp.text, "html.parser")
     items = []
-    for it in data.get("itemSummaries", []):
-        price = it.get("price", {})
+    for card in soup.select("li.s-item"):
+        link = card.select_one("a.s-item__link")
+        title_el = card.select_one(".s-item__title")
+        if not link or not link.get("href") or not title_el:
+            continue
+        title = title_el.get_text(strip=True)
+        if not title or title.lower() == "shop on ebay":
+            continue  # eBay always injects one non-result placeholder card
+
+        url = link["href"].split("?")[0]
+        id_match = _ITEM_ID_RE.search(url)
+        item_id = id_match.group(1) if id_match else url
+
+        img = card.select_one(".s-item__image-img")
+        image = (img.get("src") or img.get("data-src")) if img else None
+
+        price_el = card.select_one(".s-item__price")
+        price = _parse_price(price_el.get_text(strip=True)) if price_el else None
+
         items.append({
             "source": "eBay",
             "type": "resale",
-            "title": it.get("title"),
-            "url": it.get("itemWebUrl"),
-            "price": float(price["value"]) if price.get("value") else None,
+            "title": title,
+            "url": url,
+            "price": price,
             "compare_at_price": None,
             "on_sale": None,
-            "is_new": True,  # newlyListed sort — every result is a fresh listing
+            "is_new": True,  # sorted newly-listed first - first_seen tracking still governs actual recency
             # eBay's search results don't reliably expose size (it's buried in
-            # per-item "item specifics", a separate API call per listing) —
+            # per-item "item specifics", a separate page per listing) -
             # unknown sizes always show rather than being filtered out.
             "sizes": [],
             "size_match": None,
-            "image": (it.get("image") or {}).get("imageUrl"),
-            "id": f"ebay:{it.get('itemId')}",
+            "image": image,
+            "id": f"ebay:{item_id}",
             "matched_term": keywords,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         })
+        if len(items) >= limit:
+            break
     return items
 
 
-def fetch(keywords: list[str] | str, site: str, category_id: str | None,
-          client_id_env: str, client_secret_env: str, limit: int = 50) -> list[dict]:
-    """keywords can be a single string or a list — each term gets its own
+def fetch(keywords: list[str] | str, site: str, category_id: str | None = None,
+          limit: int = 60) -> list[dict]:
+    """keywords can be a single string or a list - each term gets its own
     search, results are merged and deduplicated by eBay item ID (an item can
     legitimately match more than one of your terms)."""
     if isinstance(keywords, str):
         keywords = [keywords]
 
-    client_id = os.environ.get(client_id_env)
-    client_secret = os.environ.get(client_secret_env)
-    if not client_id or not client_secret:
-        print(f"[ebay] skipped — set {client_id_env} and {client_secret_env} "
-              f"as environment variables / GitHub Actions secrets.")
-        return []
-
-    token = _get_token(client_id, client_secret)
-    if not token:
+    domain = SITE_DOMAINS.get(site)
+    if not domain:
+        print(f"[ebay] unknown site '{site}' - add it to SITE_DOMAINS in sources/ebay.py")
         return []
 
     seen_ids = set()
     items = []
     for term in keywords:
-        for it in _search_one(term, site, category_id, token, limit):
+        for it in _search_one(domain, term, category_id, limit):
             if it["id"] in seen_ids:
                 continue
             seen_ids.add(it["id"])
