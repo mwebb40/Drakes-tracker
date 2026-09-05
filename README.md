@@ -24,7 +24,9 @@ Pages — no server to maintain.
   app, so this is reliable in the same way the Shopify feeds are. (An
   earlier version used eBay's official Browse API, but that requires
   developer program approval, which isn't guaranteed — this avoids that
-  gate entirely.)
+  gate entirely.) Results are filtered to items located in the UK
+  (`LH_PrefLoc=1`, the same "Item location" filter eBay's own search UI
+  sends) — excludes listings shipping from overseas.
 - **Vinted**: no official API exists. This uses Vinted's own internal
   search endpoint, which sits behind Datadome anti-bot protection — see
   the "Vinted reliability" section below for what to do if it starts

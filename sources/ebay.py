@@ -169,7 +169,14 @@ def _from_item_links(soup: BeautifulSoup, keywords: str) -> list[dict]:
 
 def _search_one(session: requests.Session, domain: str, keywords: str,
                  category_id: str | None, limit: int) -> list[dict]:
-    params = {"_nkw": keywords, "_sop": "10"}  # _sop=10: newly listed first
+    params = {
+        "_nkw": keywords,
+        "_sop": "10",  # newly listed first
+        "LH_PrefLoc": "1",  # "Item location" filter, same param eBay's own
+                            # search UI sends when you tick "UK Only" (or
+                            # whichever country the site domain is for) -
+                            # excludes listings shipping from elsewhere.
+    }
     if category_id:
         params["_sacat"] = category_id
 
