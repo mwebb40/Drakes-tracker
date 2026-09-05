@@ -38,7 +38,7 @@ SITE_DOMAINS = {
 }
 
 _PRICE_RE = re.compile(r"[\d,]+\.\d{2}|\d+")
-_CURRENCY_PRICE_RE = re.compile(r"[£$€]\s?[\d,]+\.\d{2}(?:\s*to\s*[£$€]\s?[\d,]+\.\d{2})?")
+_CURRENCY_PRICE_RE = re.compile(r"[£$€]\s?\d{1,4}(?:,\d{3})*(?:\.\d{2})?")
 _ITEM_ID_RE = re.compile(r"/itm/(?:[^/]+/)?(\d+)")
 
 
@@ -47,6 +47,39 @@ def _parse_price(text: str) -> float | None:
         return None
     match = _PRICE_RE.search(text.replace(",", ""))
     return float(match.group()) if match else None
+
+
+def _find_price_near(anchor) -> float | None:
+    """Walk up from a listing's title/link to the enclosing card and pull
+    the first price-looking string out of its text - robust to eBay's class
+    names changing since it doesn't depend on them at all. Requires a
+    currency symbol so it can't grab an unrelated number (an item ID, a
+    size, a rating count) the way a bare-digit match could."""
+    node = anchor
+    for _ in range(6):  # climb a handful of ancestor levels
+        node = node.parent
+        if node is None:
+            break
+        match = _CURRENCY_PRICE_RE.search(node.get_text(" ", strip=True))
+        if match:
+            return _parse_price(match.group(0))
+    return None
+
+
+def _find_image_near(anchor) -> str | None:
+    """Same climb as _find_price_near, but for a thumbnail - eBay sometimes
+    wraps the image in its own separate <a> next to (not inside) the title
+    link, so an image search scoped to the title link alone can miss it."""
+    node = anchor
+    img = node.find("img")
+    for _ in range(6):
+        if img is not None:
+            break
+        node = node.parent
+        if node is None:
+            break
+        img = node.find("img")
+    return (img.get("src") or img.get("data-src")) if img else None
 
 
 def _make_item(url: str, item_id: str, title: str, price: float | None,
@@ -127,20 +160,8 @@ def _from_item_links(soup: BeautifulSoup, keywords: str) -> list[dict]:
 
         seen_ids.add(item_id)
         url = a["href"].split("?")[0]
-
-        # Price/image usually live in a shared ancestor container, not on
-        # the link itself - walk up a couple of levels looking for them.
-        container = a
-        for _ in range(4):
-            if container.parent is None:
-                break
-            container = container.parent
-            if container.find(string=_PRICE_RE):
-                break
-
-        price = _parse_price(container.get_text(" ", strip=True))
-        img = container.find("img")
-        image = (img.get("src") or img.get("data-src")) if img else None
+        price = _find_price_near(a)
+        image = _find_image_near(a)
 
         items.append(_make_item(url, item_id, title, price, image, keywords))
     return items
