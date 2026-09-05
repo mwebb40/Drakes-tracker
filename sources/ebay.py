@@ -7,14 +7,26 @@ html_store.py. It's unofficial and the page markup can change without
 notice, but eBay's search results are plain server-rendered HTML (not a
 JS app), so a plain requests+BeautifulSoup fetch reliably sees real results,
 unlike the JS-heavy retailer sites html_store.py has to guess at.
+
+eBay's edge does block requests that don't look like a real browser (a bare
+"python-requests" User-Agent gets an immediate 403, including from GitHub
+Actions' shared IP ranges) - a full browser-style header set plus a cookie
+warm-up against the homepage first (same trick sources/vinted.py uses
+against Vinted's Datadome) is enough to pass.
 """
 from __future__ import annotations
 import re
+import time
 import requests
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; DrakesTracker/1.0)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-GB,en;q=0.9",
+}
 
 # Maps the eBay "marketplace ID" style site codes already used elsewhere in
 # this project's config (config.EBAY_SITE) to eBay's own search domain.
@@ -36,18 +48,14 @@ def _parse_price(text: str) -> float | None:
     return float(match.group()) if match else None
 
 
-def _search_one(domain: str, keywords: str, category_id: str | None, limit: int) -> list[dict]:
+def _search_one(session: requests.Session, domain: str, keywords: str,
+                 category_id: str | None, limit: int) -> list[dict]:
     params = {"_nkw": keywords, "_sop": "10"}  # _sop=10: newly listed first
     if category_id:
         params["_sacat"] = category_id
 
-    try:
-        resp = requests.get(f"https://{domain}/sch/i.html", params=params,
-                             headers=HEADERS, timeout=20)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        print(f"[ebay] search '{keywords}' failed ({e})")
-        return []
+    resp = session.get(f"https://{domain}/sch/i.html", params=params, timeout=20)
+    resp.raise_for_status()
 
     soup = BeautifulSoup(resp.text, "html.parser")
     items = []
@@ -107,12 +115,29 @@ def fetch(keywords: list[str] | str, site: str, category_id: str | None = None,
         print(f"[ebay] unknown site '{site}' - add it to SITE_DOMAINS in sources/ebay.py")
         return []
 
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    try:
+        # Warm-up: picks up eBay's anon session cookies before hitting search,
+        # the same trick sources/vinted.py uses against Vinted's Datadome -
+        # a cold request straight to /sch/i.html gets a 403 from eBay's edge.
+        session.get(f"https://{domain}/", timeout=20)
+    except requests.RequestException as e:
+        print(f"[ebay] warm-up failed ({e}) - likely blocked, skipping this run")
+        return []
+
     seen_ids = set()
     items = []
     for term in keywords:
-        for it in _search_one(domain, term, category_id, limit):
+        try:
+            batch = _search_one(session, domain, term, category_id, limit)
+        except requests.RequestException as e:
+            print(f"[ebay] search '{term}' failed ({e})")
+            continue
+        for it in batch:
             if it["id"] in seen_ids:
                 continue
             seen_ids.add(it["id"])
             items.append(it)
+        time.sleep(1)  # small gap between searches, politer to eBay's edge
     return items

@@ -231,6 +231,16 @@ Vinted results:
   (dashboard, state diffing) doesn't need to change — just make `fetch()`
   return the same item shape.
 
+## eBay reliability
+
+Like Vinted, eBay's edge blocks requests that don't look like a real
+browser, including from GitHub Actions' shared IP ranges — `sources/ebay.py`
+warms up a session against the eBay homepage first (same trick as Vinted)
+before hitting search, which is usually enough. If your runs start showing
+zero eBay results (check the run's log for `[ebay] warm-up failed` or
+`[ebay] search '...' failed`), the same two fixes as Vinted reliability
+above apply: run it locally instead, or swap in a paid scraper service.
+
 ## Limitations / honesty check
 
 - HTML-scraped retailers (END., Mr Porter, All Blues Co) can't reliably
