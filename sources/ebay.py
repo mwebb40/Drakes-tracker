@@ -38,6 +38,7 @@ SITE_DOMAINS = {
 }
 
 _PRICE_RE = re.compile(r"[\d,]+\.\d{2}|\d+")
+_CURRENCY_PRICE_RE = re.compile(r"[£$€]\s?[\d,]+\.\d{2}(?:\s*to\s*[£$€]\s?[\d,]+\.\d{2})?")
 _ITEM_ID_RE = re.compile(r"/itm/(?:[^/]+/)?(\d+)")
 
 
@@ -48,16 +49,34 @@ def _parse_price(text: str) -> float | None:
     return float(match.group()) if match else None
 
 
-def _search_one(session: requests.Session, domain: str, keywords: str,
-                 category_id: str | None, limit: int) -> list[dict]:
-    params = {"_nkw": keywords, "_sop": "10"}  # _sop=10: newly listed first
-    if category_id:
-        params["_sacat"] = category_id
+def _make_item(url: str, item_id: str, title: str, price: float | None,
+               image: str | None, keywords: str) -> dict:
+    return {
+        "source": "eBay",
+        "type": "resale",
+        "title": title,
+        "url": url,
+        "price": price,
+        "compare_at_price": None,
+        "on_sale": None,
+        "is_new": True,  # sorted newly-listed first - first_seen tracking still governs actual recency
+        # eBay's search results don't reliably expose size (it's buried in
+        # per-item "item specifics", a separate page per listing) -
+        # unknown sizes always show rather than being filtered out.
+        "sizes": [],
+        "size_match": None,
+        "image": image,
+        "id": f"ebay:{item_id}",
+        "matched_term": keywords,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
 
-    resp = session.get(f"https://{domain}/sch/i.html", params=params, timeout=20)
-    resp.raise_for_status()
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+def _from_item_cards(soup: BeautifulSoup, keywords: str) -> list[dict]:
+    """The classic eBay search result markup (li.s-item, with a fixed set of
+    sub-classes for title/price/image). Cheap to check first when it applies,
+    but eBay has multiple result-grid layouts in rotation and this one won't
+    always be what a given request gets back - see _from_item_links below."""
     items = []
     for card in soup.select("li.s-item"):
         link = card.select_one("a.s-item__link")
@@ -78,28 +97,76 @@ def _search_one(session: requests.Session, domain: str, keywords: str,
         price_el = card.select_one(".s-item__price")
         price = _parse_price(price_el.get_text(strip=True)) if price_el else None
 
-        items.append({
-            "source": "eBay",
-            "type": "resale",
-            "title": title,
-            "url": url,
-            "price": price,
-            "compare_at_price": None,
-            "on_sale": None,
-            "is_new": True,  # sorted newly-listed first - first_seen tracking still governs actual recency
-            # eBay's search results don't reliably expose size (it's buried in
-            # per-item "item specifics", a separate page per listing) -
-            # unknown sizes always show rather than being filtered out.
-            "sizes": [],
-            "size_match": None,
-            "image": image,
-            "id": f"ebay:{item_id}",
-            "matched_term": keywords,
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-        })
-        if len(items) >= limit:
-            break
+        items.append(_make_item(url, item_id, title, price, image, keywords))
     return items
+
+
+def _from_item_links(soup: BeautifulSoup, keywords: str) -> list[dict]:
+    """Generic fallback, same technique html_store.py uses for JS-heavy
+    retailer sites: find every link that actually points at a listing
+    (/itm/<id>) regardless of whatever CSS classes eBay's current experiment
+    bucket happens to wrap it in, then pull whatever title/price/image text
+    we can find nearby. Less precise than _from_item_cards but far more
+    resilient to eBay's markup changing under us."""
+    items = []
+    seen_ids = set()
+    for a in soup.find_all("a", href=True):
+        id_match = _ITEM_ID_RE.search(a["href"])
+        if not id_match:
+            continue
+        item_id = id_match.group(1)
+        if item_id in seen_ids:
+            continue
+
+        title = _CURRENCY_PRICE_RE.sub("", a.get_text(" ", strip=True)).strip()
+        if not title:
+            img_in_link = a.find("img")
+            title = (img_in_link.get("alt") or "").strip() if img_in_link else ""
+        if not title or title.lower() == "shop on ebay":
+            continue
+
+        seen_ids.add(item_id)
+        url = a["href"].split("?")[0]
+
+        # Price/image usually live in a shared ancestor container, not on
+        # the link itself - walk up a couple of levels looking for them.
+        container = a
+        for _ in range(4):
+            if container.parent is None:
+                break
+            container = container.parent
+            if container.find(string=_PRICE_RE):
+                break
+
+        price = _parse_price(container.get_text(" ", strip=True))
+        img = container.find("img")
+        image = (img.get("src") or img.get("data-src")) if img else None
+
+        items.append(_make_item(url, item_id, title, price, image, keywords))
+    return items
+
+
+def _search_one(session: requests.Session, domain: str, keywords: str,
+                 category_id: str | None, limit: int) -> list[dict]:
+    params = {"_nkw": keywords, "_sop": "10"}  # _sop=10: newly listed first
+    if category_id:
+        params["_sacat"] = category_id
+
+    resp = session.get(f"https://{domain}/sch/i.html", params=params, timeout=20)
+    resp.raise_for_status()
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    items = _from_item_cards(soup, keywords)
+    if not items:
+        items = _from_item_links(soup, keywords)
+    if not items:
+        # Neither strategy found anything on a 200 response - probably an
+        # anti-bot interstitial rather than real results. Logging the page
+        # title (not the full body) gives a next-run debugging clue without
+        # spamming the log.
+        page_title = soup.title.get_text(strip=True) if soup.title else "(no <title>)"
+        print(f"[ebay] search '{keywords}' returned 0 results (page title: {page_title!r})")
+    return items[:limit]
 
 
 def fetch(keywords: list[str] | str, site: str, category_id: str | None = None,
