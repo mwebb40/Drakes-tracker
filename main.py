@@ -256,7 +256,10 @@ def render_price_filters(any_on_sale: bool, any_under_100: bool) -> str:
 
 def render_sort_toggle() -> str:
     return ('<div class="filters"><div class="filters-label">Sort by</div>'
-            '<button type="button" class="chip" id="sort-newest">Newest added first</button></div>')
+            '<button type="button" class="chip" id="sort-newest">Newest added first</button></div>'
+            '<div class="meta" id="sort-newest-hint" style="display:none; margin:-10px 0 20px;">'
+            'Showing every matching item in one list, newest added first — sections are merged while this is on.'
+            '</div>')
 
 
 def render_recency_filter() -> str:
@@ -373,13 +376,15 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
           </a>
         </div>"""
 
-    def section(title: str, items_: list[dict], muted: bool = False) -> str:
+    def section(title: str, items_: list[dict], section_id: str, muted: bool = False) -> str:
         cls = "section-label muted" if muted else "section-label"
         if not items_:
-            return f'<div class="{cls}">{title}</div><p class="empty">Nothing here right now.</p><div class="rule"></div>'
-        return (f'<div class="{cls}">{title}</div>'
-                f'<div class="grid">{"".join(card(i) for i in items_)}</div>'
-                f'<div class="rule"></div>')
+            body = '<p class="empty">Nothing here right now.</p>'
+        else:
+            body = f'<div class="grid">{"".join(card(i) for i in items_)}</div>'
+        return (f'<div class="section-block" id="{section_id}">'
+                f'<div class="{cls}">{title}</div>{body}<div class="rule"></div>'
+                f'</div>')
 
     generated = datetime.now(timezone.utc).strftime("%-d %B %Y, %H:%M UTC")
     target_sizes_json = json.dumps(config.TARGET_SIZES)
@@ -418,9 +423,9 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
     {render_sold_out_toggle(any_sold_out)}
     {render_price_filters(any_on_sale, any_under_100)}
   </div>
-  {section("New today", new_arrivals)}
-  {section("On sale", on_sale)}
-  {section("Everything else", everything_else, muted=True)}
+  {section("New today", new_arrivals, "section-new")}
+  {section("On sale", on_sale, "section-sale")}
+  {section("Everything else", everything_else, "section-rest", muted=True)}
   <script>
     {MY_SIZES_JS_HELPERS}
     (function() {{
@@ -457,20 +462,56 @@ def render_dashboard(items: list[dict], first_seen: dict[str, str]) -> str:
           }}
         }});
       }}
-      var grids = document.querySelectorAll('.grid');
-      var originalOrder = new Map();
-      grids.forEach(function(g) {{ originalOrder.set(g, Array.from(g.children)); }});
+      // Each section (New today / On sale / Everything else) keeps its own
+      // grid and original card order. "Newest added first" merges every
+      // section's cards into one list in the first section's grid, sorted
+      // by first-seen across the whole page - not just reordered within
+      // each section - since the point is "what's new, full stop",
+      // regardless of which section/brand/store it'd normally sit under.
+      var sectionState = Array.from(document.querySelectorAll('.section-block')).map(function(block) {{
+        var grid = block.querySelector('.grid');
+        return {{
+          block: block,
+          label: block.querySelector('.section-label'),
+          originalLabel: block.querySelector('.section-label') ? block.querySelector('.section-label').textContent : '',
+          grid: grid,
+          originalCards: grid ? Array.from(grid.children) : []
+        }};
+      }});
+      var sortHint = document.getElementById('sort-newest-hint');
       var sortNewestFirst = false;
       function applySort() {{
-        grids.forEach(function(g) {{
-          var order = originalOrder.get(g).slice();
-          if (sortNewestFirst) {{
-            order.sort(function(a, b) {{
-              return parseFloat(b.dataset.firstSeen || 0) - parseFloat(a.dataset.firstSeen || 0);
-            }});
+        if (sortNewestFirst) {{
+          var allCards = [];
+          sectionState.forEach(function(s) {{ allCards = allCards.concat(s.originalCards); }});
+          allCards.sort(function(a, b) {{
+            return parseFloat(b.dataset.firstSeen || 0) - parseFloat(a.dataset.firstSeen || 0);
+          }});
+          var target = sectionState[0];
+          if (target && allCards.length) {{
+            var grid = target.grid;
+            if (!grid) {{
+              grid = document.createElement('div');
+              grid.className = 'grid';
+              var emptyMsg = target.block.querySelector('.empty');
+              if (emptyMsg) {{ target.block.replaceChild(grid, emptyMsg); }} else {{ target.block.appendChild(grid); }}
+              target.grid = grid;
+            }}
+            allCards.forEach(function(c) {{ grid.appendChild(c); }});
+            if (target.label) target.label.textContent = 'Newest added';
           }}
-          order.forEach(function(c) {{ g.appendChild(c); }});
-        }});
+          sectionState.forEach(function(s, idx) {{
+            if (idx !== 0) s.block.style.display = 'none';
+          }});
+          if (sortHint) sortHint.style.display = '';
+        }} else {{
+          sectionState.forEach(function(s) {{
+            if (s.grid) {{ s.originalCards.forEach(function(c) {{ s.grid.appendChild(c); }}); }}
+            if (s.label) s.label.textContent = s.originalLabel;
+            s.block.style.display = '';
+          }});
+          if (sortHint) sortHint.style.display = 'none';
+        }}
       }}
       var sortToggle = document.getElementById('sort-newest');
       if (sortToggle) {{

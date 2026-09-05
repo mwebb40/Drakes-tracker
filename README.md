@@ -177,14 +177,15 @@ to whatever's in `TARGET_SIZES`.
 
 ## Sorting by newest added
 
-A **"Newest added first"** toggle sits above the other filters and reorders
-each section's cards (New today, On sale, Everything else - it never moves
-items between sections) so the most recently first-seen items in that
-section show up first. It uses the same `data/state.json` first-seen
-timestamp as the recency filter, just at full precision instead of
-today/this week/older buckets, so it's independent of every other filter
-and can be combined with any of them. Toggling it off restores each
-section's original order.
+A **"Newest added first"** toggle sits above the other filters. Turning it
+on merges New today, On sale and Everything else into a single list -
+regardless of brand, store or section - ordered by when each item was
+first recorded in `data/state.json`, newest first, so if you haven't
+checked in for a few hours you can see exactly what's turned up since,
+across everything at once. It's independent of every other filter (size,
+source, brand, sold-out, on sale, price, etc.) and can be combined with
+any of them. Toggling it off restores the normal New today / On sale /
+Everything else layout.
 
 ## Filtering out sold-out items
 
